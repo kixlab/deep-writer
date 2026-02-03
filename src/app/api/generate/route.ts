@@ -46,7 +46,7 @@ function buildUserPrompt(request: GenerateRequest): string {
 
 // --- Response Parsing ---
 
-function parseGenerateResponse(content: string): GenerateResponse | null {
+function parseGenerateResponse(content: string, gapIds: string[]): GenerateResponse | null {
   // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
   let cleaned = content.trim();
   const fenceMatch = cleaned.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
@@ -55,25 +55,50 @@ function parseGenerateResponse(content: string): GenerateResponse | null {
   }
 
   // Try direct JSON parse
+  let parsed: Record<string, unknown> | null = null;
   try {
-    const parsed = JSON.parse(cleaned);
-    if (parsed.gaps && Array.isArray(parsed.gaps)) {
-      return parsed as GenerateResponse;
-    }
+    parsed = JSON.parse(cleaned);
   } catch {
-    // Not valid JSON, try fallback
+    // Not valid JSON, try extracting JSON from prose
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        parsed = JSON.parse(jsonMatch[0]);
+      } catch {
+        // Also failed
+      }
+    }
   }
 
-  // Fallback: extract JSON object containing "gaps" array from prose
-  const jsonMatch = cleaned.match(/\{[\s\S]*"gaps"\s*:\s*\[[\s\S]*?\]\s*\}/);
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed.gaps && Array.isArray(parsed.gaps)) {
-        return parsed as GenerateResponse;
-      }
-    } catch {
-      // Fallback parsing also failed
+  if (!parsed) return null;
+
+  // Case 1: Standard format { "gaps": [{ "id": "...", "text": "..." }] }
+  if (parsed.gaps && Array.isArray(parsed.gaps)) {
+    return parsed as unknown as GenerateResponse;
+  }
+
+  // Case 2: Model returned { "text": "..." } or { "content": "..." } -- wrap into gaps format
+  const textContent = parsed.text ?? parsed.content ?? parsed.response ?? parsed.result;
+  if (typeof textContent === 'string' && gapIds.length > 0) {
+    return { gaps: [{ id: gapIds[0], text: textContent }] };
+  }
+
+  // Case 3: Model returned { "<gap_id>": "text" } -- extract by gap IDs
+  const gapResults: Array<{ id: string; text: string }> = [];
+  for (const gapId of gapIds) {
+    if (typeof parsed[gapId] === 'string') {
+      gapResults.push({ id: gapId, text: parsed[gapId] as string });
+    }
+  }
+  if (gapResults.length > 0) {
+    return { gaps: gapResults };
+  }
+
+  // Case 4: Model returned plain text (not JSON) -- use as single gap fill
+  if (gapIds.length > 0 && typeof content === 'string' && content.length > 0) {
+    // Only if parsing truly failed and we have raw text
+    if (!parsed.gaps) {
+      return { gaps: [{ id: gapIds[0], text: cleaned }] };
     }
   }
 
@@ -127,12 +152,14 @@ export async function POST(request: NextRequest) {
 
   const generateRequest = body as GenerateRequest;
 
-  // Calculate max tokens based on gap sizes
+  // Calculate max tokens based on gap sizes and mode
   const totalGapChars = generateRequest.gaps.reduce(
     (sum, gap) => sum + gap.originalText.length,
     0,
   );
-  const maxTokens = Math.max(256, Math.min(4096, Math.ceil(totalGapChars * 2)));
+  const maxTokens = generateRequest.mode === 'continuation'
+    ? 2048  // Continuation/first-draft needs more room
+    : Math.max(512, Math.min(4096, Math.ceil(totalGapChars * 3)));
 
   // Build prompt
   const userPrompt = buildUserPrompt(generateRequest);
@@ -159,8 +186,15 @@ export async function POST(request: NextRequest) {
 
     clearTimeout(timeout);
 
-    const content = completion.choices[0]?.message?.content;
+    const message = completion.choices[0]?.message;
+    const content = message?.content;
+    const finishReason = completion.choices[0]?.finish_reason;
+
+    console.log('[/api/generate] finish_reason:', finishReason);
+    console.log('[/api/generate] raw content:', content?.slice(0, 500));
+
     if (!content) {
+      console.error('[/api/generate] Empty content. refusal:', message?.refusal);
       return NextResponse.json(
         { error: 'Empty response from AI. Please try again.', retryable: true },
         { status: 502 },
@@ -168,10 +202,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse response
-    const parsed = parseGenerateResponse(content);
+    const gapIds = generateRequest.gaps.map((g) => g.id);
+    const parsed = parseGenerateResponse(content, gapIds);
     if (!parsed) {
+      console.error('[/api/generate] Parse failed. Raw:', content.slice(0, 1000));
       return NextResponse.json(
-        { error: 'Could not parse AI response. Please try again.', retryable: true },
+        { error: `Could not parse AI response. Raw: ${content.slice(0, 200)}`, retryable: true },
         { status: 502 },
       );
     }
