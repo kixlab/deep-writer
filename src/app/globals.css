@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* Diff decoration styles */
+.diff-original {
+  text-decoration: line-through;
+  text-decoration-color: rgb(239 68 68);
+  text-decoration-thickness: 2px;
+  background-color: rgb(254 226 226);
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.diff-original:hover {
+  opacity: 1;
+  background-color: rgb(254 202 202);
+}
+
+.diff-replacement {
+  background-color: rgb(187 247 208);
+  padding: 0 4px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.diff-replacement:hover {
+  background-color: rgb(134 239 172);
+}
+
+@media (prefers-color-scheme: dark) {
+  .diff-original {
+    background-color: rgba(127, 29, 29, 0.3);
+  }
+  .diff-original:hover {
+    background-color: rgba(127, 29, 29, 0.5);
+  }
+  .diff-replacement {
+    background-color: rgba(6, 78, 59, 0.4);
+  }
+  .diff-replacement:hover {
+    background-color: rgba(6, 78, 59, 0.6);
+  }
+}
