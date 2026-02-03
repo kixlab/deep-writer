@@ -1,44 +1,68 @@
 @import "tailwindcss";
 
-/* Diff decoration styles */
+/* Switch Tailwind dark mode from media query to class-based */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Diff decoration styles — VS Code-level visibility */
 .diff-original {
   text-decoration: line-through;
-  text-decoration-color: rgb(239 68 68);
+  text-decoration-color: rgb(220 38 38);
   text-decoration-thickness: 2px;
-  background-color: rgb(254 226 226);
-  opacity: 0.7;
+  background-color: rgba(239, 68, 68, 0.2);
+  color: rgba(0, 0, 0, 0.5);
   cursor: pointer;
 }
 
 .diff-original:hover {
-  opacity: 1;
-  background-color: rgb(254 202 202);
+  background-color: rgba(239, 68, 68, 0.3);
+  color: rgba(0, 0, 0, 0.7);
 }
 
 .diff-replacement {
-  background-color: rgb(187 247 208);
-  padding: 0 4px;
+  background-color: rgba(34, 197, 94, 0.25);
+  padding: 2px 4px;
   border-radius: 2px;
+  border-left: 3px solid rgb(34 197 94);
   cursor: pointer;
 }
 
 .diff-replacement:hover {
-  background-color: rgb(134 239 172);
+  background-color: rgba(34, 197, 94, 0.4);
 }
 
-@media (prefers-color-scheme: dark) {
-  .diff-original {
-    background-color: rgba(127, 29, 29, 0.3);
-  }
-  .diff-original:hover {
-    background-color: rgba(127, 29, 29, 0.5);
-  }
-  .diff-replacement {
-    background-color: rgba(6, 78, 59, 0.4);
-  }
-  .diff-replacement:hover {
-    background-color: rgba(6, 78, 59, 0.6);
-  }
+:where(.dark, .dark *) .diff-original {
+  background-color: rgba(239, 68, 68, 0.25);
+  color: rgba(255, 255, 255, 0.45);
+}
+:where(.dark, .dark *) .diff-original:hover {
+  background-color: rgba(239, 68, 68, 0.35);
+  color: rgba(255, 255, 255, 0.6);
+}
+:where(.dark, .dark *) .diff-replacement {
+  background-color: rgba(34, 197, 94, 0.2);
+  border-left-color: rgb(74 222 128);
+}
+:where(.dark, .dark *) .diff-replacement:hover {
+  background-color: rgba(34, 197, 94, 0.35);
+}
+
+/* Side-by-side diff panel highlights */
+.diff-highlight-removed {
+  background-color: rgba(239, 68, 68, 0.18);
+  border-radius: 2px;
+}
+
+.diff-highlight-added {
+  background-color: rgba(34, 197, 94, 0.2);
+  border-radius: 2px;
+}
+
+:where(.dark, .dark *) .diff-highlight-removed {
+  background-color: rgba(239, 68, 68, 0.22);
+}
+
+:where(.dark, .dark *) .diff-highlight-added {
+  background-color: rgba(34, 197, 94, 0.18);
 }
 
 /* Marking selection styles */
@@ -59,27 +83,223 @@
   border-radius: 2px;
 }
 
-.marking-edit-mode {
-  outline: 2px solid rgb(96 165 250);
-  outline-offset: 1px;
-  border-radius: 2px;
-  background-color: rgb(239 246 255);
+:where(.dark, .dark *) .marking-selection-word {
+  background-color: rgba(59, 130, 246, 0.15);
+}
+:where(.dark, .dark *) .marking-selection-phrase {
+  background-color: rgba(99, 102, 241, 0.2);
+  border-bottom-color: rgba(129, 140, 248, 0.6);
+}
+:where(.dark, .dark *) .marking-selection-sentence {
+  background-color: rgba(99, 102, 241, 0.15);
+  border-bottom-color: rgba(99, 102, 241, 0.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  .marking-selection-word {
-    background-color: rgba(59, 130, 246, 0.15);
+/* Alternative Suggestions Tooltip */
+.alternatives-tooltip {
+  background-color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 4px;
+  min-width: 200px;
+}
+
+.alternatives-tooltip-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #1f2937;
+  font-size: 14px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.alternatives-tooltip-item:hover {
+  background-color: rgba(59, 130, 246, 0.08);
+}
+
+.alternatives-tooltip-item:focus-visible {
+  outline: 2px solid rgb(59, 130, 246);
+  outline-offset: -2px;
+}
+
+.alternatives-tooltip-loading {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alternatives-tooltip-skeleton {
+  height: 16px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: alternatives-skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.alternatives-tooltip-skeleton:nth-child(2) {
+  width: 85%;
+}
+
+.alternatives-tooltip-skeleton:nth-child(3) {
+  width: 70%;
+}
+
+@keyframes alternatives-skeleton-pulse {
+  0% {
+    background-position: 200% 0;
   }
-  .marking-selection-phrase {
-    background-color: rgba(99, 102, 241, 0.2);
-    border-bottom-color: rgba(129, 140, 248, 0.6);
+  100% {
+    background-position: -200% 0;
   }
-  .marking-selection-sentence {
-    background-color: rgba(99, 102, 241, 0.15);
-    border-bottom-color: rgba(99, 102, 241, 0.6);
-  }
-  .marking-edit-mode {
-    outline-color: rgba(96, 165, 250, 0.6);
-    background-color: rgba(59, 130, 246, 0.1);
-  }
+}
+
+.alternatives-tooltip-error {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #dc2626;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.alternatives-tooltip-retry {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: transparent;
+  color: #374151;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.alternatives-tooltip-retry:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Dark mode for Alternative Suggestions Tooltip */
+:where(.dark, .dark *) .alternatives-tooltip {
+  background-color: #1f2937;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+:where(.dark, .dark *) .alternatives-tooltip-item {
+  color: #e5e7eb;
+}
+
+:where(.dark, .dark *) .alternatives-tooltip-item:hover {
+  background-color: rgba(59, 130, 246, 0.15);
+}
+
+:where(.dark, .dark *) .alternatives-tooltip-skeleton {
+  background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
+  background-size: 200% 100%;
+  animation: alternatives-skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+:where(.dark, .dark *) .alternatives-tooltip-error {
+  color: #f87171;
+}
+
+:where(.dark, .dark *) .alternatives-tooltip-retry {
+  border-color: #4b5563;
+  color: #d1d5db;
+}
+
+:where(.dark, .dark *) .alternatives-tooltip-retry:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Keep/Delete Tooltip */
+.keep-delete-tooltip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background-color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
+  pointer-events: auto;
+}
+
+.keep-delete-btn {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.keep-delete-btn:focus-visible {
+  outline: 2px solid rgb(59, 130, 246);
+  outline-offset: 1px;
+}
+
+.keep-delete-btn-keep {
+  background-color: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+
+.keep-delete-btn-keep:hover {
+  background-color: rgba(34, 197, 94, 0.25);
+}
+
+.keep-delete-btn-delete {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+}
+
+.keep-delete-btn-delete:hover {
+  background-color: rgba(239, 68, 68, 0.22);
+}
+
+/* Dark mode: Keep/Delete Tooltip */
+:where(.dark, .dark *) .keep-delete-tooltip {
+  background-color: #1f2937;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+:where(.dark, .dark *) .keep-delete-btn-keep {
+  background-color: rgba(34, 197, 94, 0.18);
+  color: #4ade80;
+}
+
+:where(.dark, .dark *) .keep-delete-btn-keep:hover {
+  background-color: rgba(34, 197, 94, 0.3);
+}
+
+:where(.dark, .dark *) .keep-delete-btn-delete {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+:where(.dark, .dark *) .keep-delete-btn-delete:hover {
+  background-color: rgba(239, 68, 68, 0.28);
+}
+
+/* Clause selection highlight in diff view */
+.diff-clause-selection {
+  background-color: rgba(59, 130, 246, 0.12);
+  border-radius: 2px;
+}
+
+:where(.dark, .dark *) .diff-clause-selection {
+  background-color: rgba(59, 130, 246, 0.18);
 }

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSessionStore } from '@/stores/useSessionStore';
+import { useEditorStore } from '@/stores/useEditorStore';
 import { useLoadingStore } from '@/stores/useLoadingStore';
 import { GoalModal } from '@/components/goal/GoalModal';
 import { StartModeSelector } from '@/components/goal/StartModeSelector';
@@ -20,7 +21,12 @@ import { SkeletonPlaceholder } from '@/components/editor/SkeletonPlaceholder';
 import { PromptBar } from '@/components/editor/PromptBar';
 import { RegenerateButton } from '@/components/editor/RegenerateButton';
 import { StorageWarning } from '@/components/shared/StorageWarning';
+import { DiffToolbar } from '@/components/editor/DiffToolbar';
+import { DiffSplitView } from '@/components/editor/DiffSplitView';
 import { useGeneration } from '@/hooks/useGeneration';
+import { useTheme } from '@/hooks/useTheme';
+import { applyAllDiffs } from '@/lib/diffCompute';
+import { updateDiffs } from '@/extensions/DiffDecorationPlugin';
 
 // --- Types ---
 
@@ -39,6 +45,10 @@ export default function Home() {
   const isGenerating = useLoadingStore((s) => s.isGenerating);
 
   const generation = useGeneration();
+  const { theme, toggleTheme } = useTheme();
+  const activeDiffs = useEditorStore((s) => s.activeDiffs);
+  const pendingDiffs = useMemo(() => activeDiffs.filter((d) => d.state === 'pending'), [activeDiffs]);
+  const hasPendingDiffs = pendingDiffs.length > 0;
 
   // On mount, try to load session from localStorage
   useEffect(() => {
@@ -82,6 +92,17 @@ export default function Home() {
     // Side panel goal section has its own edit button for direct editing
   }, []);
 
+  // New session handler -- clears localStorage and resets to goal prompt
+  const handleNewSession = useCallback(() => {
+    const sessionId = localStorage.getItem('cowrithink-active-session');
+    if (sessionId) {
+      localStorage.removeItem(`cowrithink-session-${sessionId}`);
+    }
+    localStorage.removeItem('cowrithink-active-session');
+    setGoal('');
+    setAppState('goal-prompt');
+  }, []);
+
   // Regenerate handler
   const handleRegenerate = useCallback(() => {
     const editor = editorHandleRef.current?.getEditor();
@@ -89,6 +110,40 @@ export default function Home() {
     const currentGoal = useSessionStore.getState().session?.goal ?? goal;
     generation.regenerate(editor, currentGoal);
   }, [goal, generation]);
+
+  // Track the modified panel's editor so Accept All uses user-edited content
+  const modifiedEditorRef = useRef<import('@tiptap/core').Editor | null>(null);
+  const handleModifiedEditorReady = useCallback((ed: import('@tiptap/core').Editor) => {
+    modifiedEditorRef.current = ed;
+  }, []);
+
+  // Accept all diffs handler -- takes content from the modified panel (includes user edits)
+  const handleAcceptAll = useCallback(() => {
+    const editor = editorHandleRef.current?.getEditor();
+    const modifiedEditor = modifiedEditorRef.current;
+    if (!editor) return;
+
+    if (modifiedEditor) {
+      editor.commands.setContent(modifiedEditor.getJSON());
+    } else {
+      applyAllDiffs(editor, pendingDiffs);
+    }
+
+    // Clean up stale marks (marked-delete, original-removed) from accepted doc
+    editor.commands.unsetMark('textState');
+
+    useEditorStore.getState().resolveAllDiffs('accept');
+    updateDiffs(editor, []);
+    modifiedEditorRef.current = null;
+  }, [pendingDiffs]);
+
+  // Reject all diffs handler
+  const handleRejectAll = useCallback(() => {
+    const editor = editorHandleRef.current?.getEditor();
+    if (!editor) return;
+    useEditorStore.getState().resolveAllDiffs('reject');
+    updateDiffs(editor, []);
+  }, []);
 
   // Prompt submit handler
   const handlePromptSubmit = useCallback((prompt: string) => {
@@ -131,7 +186,7 @@ export default function Home() {
   // Editor state
   return (
     <div className="flex h-screen flex-col">
-      <AppHeader goal={session?.goal} onGoalEdit={handleGoalEdit} />
+      <AppHeader goal={session?.goal} theme={theme} onGoalEdit={handleGoalEdit} onNewSession={handleNewSession} onToggleTheme={toggleTheme} />
       {generation.error && (
         <div className="flex items-center justify-between bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
           <span>{generation.error}</span>
@@ -149,22 +204,40 @@ export default function Home() {
             <div className="px-4 pt-2">
               <StorageWarning />
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
+            {hasPendingDiffs && editorInstance ? (
+              <>
+                <DiffToolbar
+                  diffCount={pendingDiffs.length}
+                  onAcceptAll={handleAcceptAll}
+                  onRejectAll={handleRejectAll}
+                />
+                <DiffSplitView
+                  editor={editorInstance}
+                  pendingDiffs={pendingDiffs}
+                  onModifiedEditorReady={handleModifiedEditorReady}
+                />
+              </>
+            ) : null}
+            <div className={`flex-1 overflow-y-auto bg-white px-8 py-6 dark:bg-gray-900 ${hasPendingDiffs ? 'hidden' : ''}`}>
               {isGenerating && <SkeletonPlaceholder />}
               <CoWriThinkEditor
                 ref={editorHandleRef}
                 initialContent={session?.documentState ?? ''}
               />
             </div>
-            <RegenerateButton
-              editor={editorInstance}
-              onRegenerate={handleRegenerate}
-            />
-            <PromptBar
-              editor={editorInstance}
-              goal={session?.goal}
-              onSubmit={handlePromptSubmit}
-            />
+            {!hasPendingDiffs && (
+              <RegenerateButton
+                editor={editorInstance}
+                onRegenerate={handleRegenerate}
+              />
+            )}
+            {!hasPendingDiffs && (
+              <PromptBar
+                editor={editorInstance}
+                goal={session?.goal}
+                onSubmit={handlePromptSubmit}
+              />
+            )}
           </div>
         }
         sidePanel={

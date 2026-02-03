@@ -17,6 +17,7 @@ interface EditorActions {
   addDiff: (originalText: string, replacementText: string, position: number) => string;
   resolveDiff: (diffId: string, action: 'accept' | 'reject' | 'restore') => DiffEntry | undefined;
   getActiveDiffs: () => DiffEntry[];
+  resolveAllDiffs: (action: 'accept' | 'reject') => DiffEntry[];
   setReadOnly: (value: boolean) => void;
   clearTextStates: () => void;
   removeTextState: (segmentId: string) => void;
@@ -98,6 +99,25 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
 
   getActiveDiffs: (): DiffEntry[] => {
     return get().activeDiffs.filter((d) => d.state === 'pending');
+  },
+
+  resolveAllDiffs: (action: 'accept' | 'reject'): DiffEntry[] => {
+    const stateMap: Record<'accept' | 'reject', DiffEntry['state']> = {
+      accept: 'accepted',
+      reject: 'rejected',
+    };
+    const resolved: DiffEntry[] = [];
+
+    set((prev) => ({
+      activeDiffs: prev.activeDiffs.map((d) => {
+        if (d.state !== 'pending') return d;
+        const updated = { ...d, state: stateMap[action] };
+        resolved.push(updated);
+        return updated;
+      }),
+    }));
+
+    return resolved;
   },
 
   setReadOnly: (value: boolean) => {

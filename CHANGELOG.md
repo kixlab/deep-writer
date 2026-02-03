@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (SPEC-INTERACT-002: Editor Interaction Redesign)
+
+- Immediate word highlight on single click, replacing the previous 200ms debounce delay
+- Phrase selection on double click, replacing the previous edit mode
+- Sentence selection on triple click, completing the click-based selection granularity system
+- AI alternatives tooltip on drag selection: 3-4 GPT-4o-generated alternative phrasings displayed in a floating panel, with click-to-replace
+- New `/api/alternatives` POST endpoint for lightweight alternative generation (GPT-4o, 256 max tokens, 15s timeout)
+- `useAlternatives` React hook managing fetch lifecycle with abort controller for request cancellation
+- `AlternativesTooltip` floating panel component with loading skeleton, error/retry state, and accessible listbox
+- Clause-level snap selection in split diff view: drag selection auto-expands to clause boundaries using phrase boundary detection
+- `KeepDeleteTooltip` compact tooltip for split diff view with Keep (green) and Delete (red) actions applying text state marks
+- Dark mode support for all new tooltip and selection interaction styles
+
+### Removed (SPEC-INTERACT-002: Editor Interaction Redesign)
+
+- 200ms debounce timer on click handling, eliminating perceived UI lag
+- Click-count based progressive marking where successive clicks toggled text state
+- Edit mode triggered by double-click (sentence-level inline editing region)
+- `forceExitEditMode` function and all usage in the generation hook
+
 ### Added (SPEC-INTERACT-001: Marking Interaction and AI Generation)
 
 - Progressive granularity selection via MarkingExtension: click-based text selection expanding from word to phrase to sentence level within the TipTap editor

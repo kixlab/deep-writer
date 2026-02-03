@@ -5,7 +5,6 @@ import { useLoadingStore } from '@/stores/useLoadingStore';
 import { useProvenanceStore } from '@/stores/useProvenanceStore';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { updateDiffs } from '@/extensions/DiffDecorationPlugin';
-import { forceExitEditMode } from '@/extensions/MarkingExtension';
 import type { EventType } from '@/types';
 import {
   scanDocument,
@@ -46,9 +45,6 @@ export function useGeneration() {
    * Used by the Regenerate button.
    */
   const regenerate = useCallback(async (editor: Editor, goal: string) => {
-    // Exit edit mode if active
-    forceExitEditMode(editor.view);
-
     setState({ status: 'loading', error: null, retryable: false });
     useLoadingStore.getState().startGeneration();
     useEditorStore.getState().setReadOnly(true);
@@ -120,9 +116,6 @@ export function useGeneration() {
     goal: string,
     promptText: string,
   ) => {
-    // Exit edit mode if active
-    forceExitEditMode(editor.view);
-
     const { selection } = editor.state;
     const mode = selection.empty ? 'continuation' : 'selection';
 

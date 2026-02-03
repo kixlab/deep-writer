@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import type { JSONContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -11,6 +11,8 @@ import {
   updateDiffs,
 } from '@/extensions/DiffDecorationPlugin';
 import { MarkingExtension } from '@/extensions/MarkingExtension';
+import type { DragSelectionData } from '@/extensions/MarkingExtension';
+import { AlternativesTooltip } from '@/components/editor/AlternativesTooltip';
 import { useEditorStore } from '@/stores/useEditorStore';
 import { useLoadingStore } from '@/stores/useLoadingStore';
 import { useProvenanceStore } from '@/stores/useProvenanceStore';
@@ -42,6 +44,19 @@ function handleProvenanceEvent(
   useSessionStore.getState().addProvenanceEvent(event);
 }
 
+// Module-level mutable ref for drag-selection tooltip.
+// TipTap captures extension options once, so the callback must be stable.
+// This mirrors the handleProvenanceEvent pattern above.
+let _setTooltipData: ((data: DragSelectionData | null) => void) | null = null;
+
+function handleDragSelection(data: DragSelectionData) {
+  _setTooltipData?.(data);
+}
+
+function dismissTooltip() {
+  _setTooltipData?.(null);
+}
+
 // --- Component ---
 
 export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEditorProps>(
@@ -52,7 +67,14 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
     const isReadOnly = useEditorStore((s) => s.isReadOnly);
     const isGenerating = useLoadingStore((s) => s.isGenerating);
     const activeDiffs = useEditorStore((s) => s.activeDiffs);
+    const sessionGoal = useSessionStore((s) => s.session?.goal ?? '');
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
+
+    // Drag-selection tooltip state
+    const [tooltipData, setTooltipData] = useState<DragSelectionData | null>(null);
+    const handleTooltipDismiss = useCallback(() => {
+      setTooltipData(null);
+    }, []);
 
     // Diff interaction handler using getState() for fresh store access
     const handleDiffInteraction = useRef(
@@ -85,6 +107,7 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
         }),
         MarkingExtension.configure({
           onProvenanceEvent: handleProvenanceEvent,
+          onDragSelection: handleDragSelection,
         }),
       ],
       content: initialContent,
@@ -92,6 +115,8 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
       onUpdate: ({ editor: ed }) => {
         // Persist document state to session store
         useSessionStore.getState().updateDocumentState(ed.getJSON());
+        // Dismiss drag-selection tooltip when document content changes
+        dismissTooltip();
         // Call external callback if provided
         onUpdate?.(ed.getHTML());
       },
@@ -101,6 +126,15 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
     useEffect(() => {
       editorRef.current = editor;
     }, [editor]);
+
+    // Wire up the module-level tooltip callback so the MarkingExtension
+    // can set React state even though TipTap captured options once.
+    useEffect(() => {
+      _setTooltipData = setTooltipData;
+      return () => {
+        _setTooltipData = null;
+      };
+    }, []);
 
     // Expose editor instance to parent via ref
     useImperativeHandle(ref, () => ({
@@ -116,12 +150,28 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
 
     return (
       <div
-        className={`min-h-[200px] rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900 ${className}`}
+        className={`flex-1 text-gray-900 dark:text-gray-100 ${className}`}
       >
         <EditorContent
           editor={editor}
           className="prose prose-sm max-w-none dark:prose-invert focus:outline-none"
         />
+        {tooltipData && editor && (
+          <AlternativesTooltip
+            selectionRect={tooltipData.rect}
+            selectedText={tooltipData.text}
+            context={tooltipData.context}
+            goal={sessionGoal}
+            onReplace={(alternative) => {
+              editor.chain().focus().insertContentAt(
+                { from: tooltipData.from, to: tooltipData.to },
+                alternative,
+              ).run();
+              setTooltipData(null);
+            }}
+            onDismiss={handleTooltipDismiss}
+          />
+        )}
       </div>
     );
   },

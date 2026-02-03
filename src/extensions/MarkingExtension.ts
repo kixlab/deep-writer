@@ -1,9 +1,9 @@
 import { Extension } from '@tiptap/core';
-import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { EditorView } from '@tiptap/pm/view';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import type { TextState, EventType } from '@/types';
+import type { EventType } from '@/types';
 import {
   getWordBoundary,
   getPhraseBoundary,
@@ -15,21 +15,25 @@ import type { TextRange } from '@/lib/boundaries';
 
 export type SelectionLevel = 'word' | 'phrase' | 'sentence';
 
+export interface DragSelectionData {
+  from: number;
+  to: number;
+  text: string;
+  context: string;
+  rect: DOMRect;
+}
+
 export interface MarkingExtensionOptions {
   onProvenanceEvent?: (
     type: EventType,
     data: Record<string, unknown>,
   ) => void;
+  onDragSelection?: ((data: DragSelectionData) => void) | null;
 }
 
 interface MarkingPluginState {
-  clickCount: number;
-  lastClickRegion: TextRange | null;
   selectionLevel: SelectionLevel | null;
   selectedRange: TextRange | null;
-  editModeActive: boolean;
-  editModeSegment: TextRange | null;
-  editModeOriginalText: string | null;
   decorations: DecorationSet;
 }
 
@@ -42,8 +46,6 @@ const SELECTION_CLASSES: Record<SelectionLevel, string> = {
   phrase: 'marking-selection-phrase',
   sentence: 'marking-selection-sentence',
 };
-
-const EDIT_MODE_CLASS = 'marking-edit-mode';
 
 // --- Decoration Builder ---
 
@@ -64,39 +66,10 @@ function buildSelectionDecorations(
     }
   }
 
-  if (state.editModeActive && state.editModeSegment) {
-    const { from, to } = state.editModeSegment;
-    if (from >= 0 && to <= doc.content.size && from < to) {
-      decorations.push(
-        Decoration.inline(from, to, {
-          class: EDIT_MODE_CLASS,
-        }),
-      );
-    }
-  }
-
   return DecorationSet.create(doc, decorations);
 }
 
 // --- Helpers ---
-
-function rangesOverlap(a: TextRange, b: TextRange): boolean {
-  return a.from < b.to && b.from < a.to;
-}
-
-function getTextStateAtPos(
-  view: EditorView,
-  pos: number,
-): TextState | null {
-  const resolvedPos = view.state.doc.resolve(pos);
-  const marks = resolvedPos.marks();
-  for (const mark of marks) {
-    if (mark.type.name === 'textState') {
-      return mark.attrs.state as TextState;
-    }
-  }
-  return null;
-}
 
 function hasActiveDiffAtPos(view: EditorView, pos: number): boolean {
   // Check for diff decorations at this position by looking for diff plugin state
@@ -121,128 +94,25 @@ export const MarkingExtension = Extension.create<MarkingExtensionOptions>({
   addOptions() {
     return {
       onProvenanceEvent: undefined,
+      onDragSelection: null,
     };
   },
 
   addProseMirrorPlugins() {
-    const { onProvenanceEvent } = this.options;
+    const onDragSelection = this.options.onDragSelection ?? null;
 
-    // Debounce timer for single-click vs double-click disambiguation
-    let clickTimer: ReturnType<typeof setTimeout> | null = null;
-    let pendingClick: { view: EditorView; pos: number } | null = null;
-
-    const emitProvenance = (
-      type: EventType,
-      data: Record<string, unknown>,
-    ) => {
-      onProvenanceEvent?.(type, data);
-    };
-
-    function clearPendingClick() {
-      if (clickTimer) {
-        clearTimeout(clickTimer);
-        clickTimer = null;
-      }
-      pendingClick = null;
-    }
+    // Drag detection state (closure-scoped, not plugin state).
+    // We measure the distance between mousedown and mouseup to distinguish
+    // a drag-selection from a click (single, double, or triple).
+    let mouseDownCoords: { x: number; y: number } | null = null;
+    const MIN_DRAG_DISTANCE = 5;
 
     function getInitialState(): MarkingPluginState {
       return {
-        clickCount: 0,
-        lastClickRegion: null,
         selectionLevel: null,
         selectedRange: null,
-        editModeActive: false,
-        editModeSegment: null,
-        editModeOriginalText: null,
         decorations: DecorationSet.empty,
       };
-    }
-
-    function applyToggle(
-      view: EditorView,
-      from: number,
-      to: number,
-      level: SelectionLevel,
-    ) {
-      const { state } = view;
-      const doc = state.doc;
-      const text = doc.textBetween(from, to, '', '');
-
-      // Check existing text state in the range
-      const currentState = getTextStateAtPos(view, from);
-
-      const { tr } = state;
-      const markType = state.schema.marks.textState;
-      if (!markType) return;
-
-      if (currentState === 'marked-delete') {
-        // Toggle back to unmarked - remove the mark
-        tr.removeMark(from, to, markType);
-        emitProvenance('mark-applied', {
-          action: 'unmark',
-          text,
-          position: from,
-          granularity: level,
-        });
-      } else if (currentState === 'marked-preserve') {
-        // Toggle preserved to deleted
-        tr.removeMark(from, to, markType);
-        tr.addMark(from, to, markType.create({ state: 'marked-delete' }));
-        emitProvenance('mark-applied', {
-          action: 'delete',
-          text,
-          position: from,
-          granularity: level,
-        });
-      } else {
-        // Unmarked or other -> mark as deleted
-        tr.addMark(from, to, markType.create({ state: 'marked-delete' }));
-        emitProvenance('mark-applied', {
-          action: 'delete',
-          text,
-          position: from,
-          granularity: level,
-        });
-      }
-
-      view.dispatch(tr);
-    }
-
-    function exitEditMode(
-      view: EditorView,
-      pluginState: MarkingPluginState,
-    ) {
-      if (!pluginState.editModeActive || !pluginState.editModeSegment) return;
-
-      const { from, to } = pluginState.editModeSegment;
-      const currentText = view.state.doc.textBetween(from, to, '', '');
-      const originalText = pluginState.editModeOriginalText ?? '';
-
-      // If text was modified, mark as user-edited
-      if (currentText !== originalText) {
-        const markType = view.state.schema.marks.textState;
-        if (markType) {
-          const { tr } = view.state;
-          tr.addMark(from, to, markType.create({ state: 'user-edited' }));
-          view.dispatch(tr);
-        }
-        emitProvenance('edit-in-place', {
-          original: originalText,
-          new: currentText,
-          position: from,
-        });
-      }
-
-      // Reset edit mode in plugin state
-      view.dispatch(
-        view.state.tr.setMeta(markingPluginKey, {
-          ...pluginState,
-          editModeActive: false,
-          editModeSegment: null,
-          editModeOriginalText: null,
-        }),
-      );
     }
 
     function hasTextAtPos(doc: ProseMirrorNode, pos: number): boolean {
@@ -251,95 +121,6 @@ export const MarkingExtension = Extension.create<MarkingExtensionOptions>({
       const resolved = doc.resolve(Math.min(pos, doc.content.size));
       const parent = resolved.parent;
       return parent.textContent.trim().length > 0;
-    }
-
-    function processClick(view: EditorView, pos: number) {
-      const { state } = view;
-      const doc = state.doc;
-      const pluginState = markingPluginKey.getState(state) as MarkingPluginState;
-
-      // Check if click is in an active diff region - skip marking
-      if (hasActiveDiffAtPos(view, pos)) return;
-
-      // If in edit mode and clicking outside the edit segment, exit edit mode
-      if (pluginState.editModeActive && pluginState.editModeSegment) {
-        const { from, to } = pluginState.editModeSegment;
-        if (pos < from || pos >= to) {
-          exitEditMode(view, pluginState);
-        } else {
-          return; // Click inside edit segment, let native editing handle it
-        }
-      }
-
-      // Don't process marking on empty paragraphs or non-text areas
-      if (!hasTextAtPos(doc, pos)) {
-        // Clear any existing selection
-        if (pluginState.selectedRange) {
-          view.dispatch(
-            view.state.tr.setMeta(markingPluginKey, getInitialState()),
-          );
-        }
-        return;
-      }
-
-      // Progressive granularity logic
-      const wordRange = getWordBoundary(doc, pos);
-
-      // Verify the word range actually contains text
-      const wordText = doc.textBetween(wordRange.from, wordRange.to, '', '').trim();
-      if (!wordText) return;
-
-      let newClickCount: number;
-      if (
-        pluginState.lastClickRegion &&
-        rangesOverlap(wordRange, pluginState.lastClickRegion)
-      ) {
-        newClickCount = Math.min(pluginState.clickCount + 1, 3);
-      } else {
-        newClickCount = 1;
-      }
-
-      // Determine selection based on click count
-      let selectedRange: TextRange;
-      let level: SelectionLevel;
-
-      switch (newClickCount) {
-        case 1:
-          selectedRange = getWordBoundary(doc, pos);
-          level = 'word';
-          break;
-        case 2:
-          selectedRange = getPhraseBoundary(doc, pos);
-          level = 'phrase';
-          break;
-        case 3:
-          selectedRange = getSentenceBoundary(doc, pos);
-          level = 'sentence';
-          break;
-        default:
-          selectedRange = getSentenceBoundary(doc, pos);
-          level = 'sentence';
-      }
-
-      // First click: just select and highlight (no marking)
-      // Second click on same region: apply toggle (mark/unmark)
-      // Third click: expand to sentence and apply toggle
-      if (newClickCount >= 2) {
-        applyToggle(view, selectedRange.from, selectedRange.to, level);
-      }
-
-      // Update plugin state with selection decoration
-      const newState: MarkingPluginState = {
-        ...pluginState,
-        clickCount: newClickCount,
-        lastClickRegion: selectedRange,
-        selectionLevel: level,
-        selectedRange,
-        decorations: DecorationSet.empty,
-      };
-      newState.decorations = buildSelectionDecorations(newState, doc);
-
-      view.dispatch(view.state.tr.setMeta(markingPluginKey, newState));
     }
 
     return [
@@ -392,82 +173,176 @@ export const MarkingExtension = Extension.create<MarkingExtensionOptions>({
             // Don't handle if editor is not editable
             if (!view.editable) return false;
 
-            // Don't intercept clicks on empty documents or non-text areas
+            // Skip if there's an active diff at this position
+            if (hasActiveDiffAtPos(view, pos)) return false;
+
+            // Don't intercept clicks on empty paragraphs or non-text areas
             if (!hasTextAtPos(view.state.doc, pos)) return false;
 
-            clearPendingClick();
+            const doc = view.state.doc;
+            const wordRange = getWordBoundary(doc, pos);
 
-            // Debounce to distinguish from double-click
-            pendingClick = { view, pos };
-            clickTimer = setTimeout(() => {
-              if (pendingClick) {
-                processClick(pendingClick.view, pendingClick.pos);
-                pendingClick = null;
-              }
-            }, 200);
+            // Verify the word range actually contains text
+            const wordText = doc
+              .textBetween(wordRange.from, wordRange.to, '', '')
+              .trim();
+            if (!wordText) return false;
+
+            const newState: MarkingPluginState = {
+              selectionLevel: 'word',
+              selectedRange: wordRange,
+              decorations: DecorationSet.empty,
+            };
+            newState.decorations = buildSelectionDecorations(newState, doc);
+
+            view.dispatch(
+              view.state.tr.setMeta(markingPluginKey, newState),
+            );
 
             // Return false to allow default cursor placement alongside marking
             return false;
           },
 
           handleDoubleClick(view, pos) {
-            // Cancel any pending single click
-            clearPendingClick();
-
             if (!view.editable) return false;
 
-            // Check if in diff region
+            // Skip if there's an active diff at this position
             if (hasActiveDiffAtPos(view, pos)) return false;
 
-            const pluginState = markingPluginKey.getState(view.state) as MarkingPluginState;
+            // Don't handle empty paragraphs or non-text areas
+            if (!hasTextAtPos(view.state.doc, pos)) return false;
 
-            // Expand to sentence for a useful edit region
-            const sentenceRange = getSentenceBoundary(view.state.doc, pos);
-            const editRange = sentenceRange;
-            const originalText = view.state.doc.textBetween(
-              editRange.from,
-              editRange.to,
-              '',
-              '',
-            );
+            const doc = view.state.doc;
+            const phraseRange = getPhraseBoundary(doc, pos);
+
+            // Verify the phrase range actually contains text
+            const phraseText = doc
+              .textBetween(phraseRange.from, phraseRange.to, '', '')
+              .trim();
+            if (!phraseText) return false;
 
             const newState: MarkingPluginState = {
-              ...pluginState,
-              editModeActive: true,
-              editModeSegment: editRange,
-              editModeOriginalText: originalText,
-              selectedRange: null,
-              selectionLevel: null,
-              clickCount: 0,
-              lastClickRegion: null,
+              selectionLevel: 'phrase',
+              selectedRange: phraseRange,
+              decorations: DecorationSet.empty,
             };
-            newState.decorations = buildSelectionDecorations(
-              newState,
-              view.state.doc,
-            );
+            newState.decorations = buildSelectionDecorations(newState, doc);
 
             view.dispatch(
               view.state.tr.setMeta(markingPluginKey, newState),
             );
 
-            // Place cursor at click position for native editing
-            const tr = view.state.tr.setSelection(
-              TextSelection.near(view.state.doc.resolve(pos)),
-            );
-            view.dispatch(tr);
+            // Prevent browser default word selection
+            return true;
+          },
 
+          handleTripleClick(view, pos) {
+            if (!view.editable) return false;
+
+            // Skip if there's an active diff at this position
+            if (hasActiveDiffAtPos(view, pos)) return false;
+
+            // Don't handle empty paragraphs or non-text areas
+            if (!hasTextAtPos(view.state.doc, pos)) return false;
+
+            const doc = view.state.doc;
+            const sentenceRange = getSentenceBoundary(doc, pos);
+
+            // Verify the sentence range actually contains text
+            const sentenceText = doc
+              .textBetween(sentenceRange.from, sentenceRange.to, '', '')
+              .trim();
+            if (!sentenceText) return false;
+
+            const newState: MarkingPluginState = {
+              selectionLevel: 'sentence',
+              selectedRange: sentenceRange,
+              decorations: DecorationSet.empty,
+            };
+            newState.decorations = buildSelectionDecorations(newState, doc);
+
+            view.dispatch(
+              view.state.tr.setMeta(markingPluginKey, newState),
+            );
+
+            // Prevent browser default paragraph selection
             return true;
           },
 
           handleKeyDown(view, event) {
-            const pluginState = markingPluginKey.getState(view.state) as MarkingPluginState;
-
-            if (event.key === 'Escape' && pluginState.editModeActive) {
-              exitEditMode(view, pluginState);
-              return true;
+            if (event.key === 'Escape') {
+              const pluginState = markingPluginKey.getState(
+                view.state,
+              ) as MarkingPluginState;
+              if (pluginState?.selectedRange) {
+                view.dispatch(
+                  view.state.tr.setMeta(
+                    markingPluginKey,
+                    getInitialState(),
+                  ),
+                );
+                return true;
+              }
             }
 
             return false;
+          },
+
+          handleDOMEvents: {
+            mousedown: (_view: EditorView, event: Event) => {
+              const e = event as MouseEvent;
+              mouseDownCoords = { x: e.clientX, y: e.clientY };
+              return false;
+            },
+
+            mouseup: (view: EditorView, event: Event) => {
+              const e = event as MouseEvent;
+
+              if (!mouseDownCoords || !onDragSelection) {
+                mouseDownCoords = null;
+                return false;
+              }
+
+              const dx = e.clientX - mouseDownCoords.x;
+              const dy = e.clientY - mouseDownCoords.y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+              mouseDownCoords = null;
+
+              // Mouse barely moved — this is a click, not a drag
+              if (distance < MIN_DRAG_DISTANCE) return false;
+              if (!view.editable) return false;
+
+              // Defer to let ProseMirror sync the selection after the drag
+              setTimeout(() => {
+                if (!view.dom.isConnected) return;
+
+                const { from, to } = view.state.selection;
+                if (from === to) return;
+
+                const text = view.state.doc.textBetween(from, to, ' ');
+                if (text.length < 2) return;
+
+                // Get the bounding rect of the browser selection
+                const sel = window.getSelection();
+                if (!sel || sel.rangeCount === 0) return;
+                const rect = sel.getRangeAt(0).getBoundingClientRect();
+                if (rect.width === 0 && rect.height === 0) return;
+
+                // Build surrounding context (~200 chars before and after)
+                const docSize = view.state.doc.content.size;
+                const contextStart = Math.max(0, from - 200);
+                const contextEnd = Math.min(docSize, to + 200);
+                const context = view.state.doc.textBetween(
+                  contextStart,
+                  contextEnd,
+                  ' ',
+                );
+
+                onDragSelection({ from, to, text, context, rect });
+              }, 0);
+
+              return false;
+            },
           },
         },
       }),
@@ -485,50 +360,6 @@ export function getMarkingState(
   );
 }
 
-// --- Helper: Exit edit mode programmatically ---
-
-export function forceExitEditMode(view: EditorView): void {
-  const pluginState = markingPluginKey.getState(
-    view.state,
-  ) as MarkingPluginState;
-  if (pluginState?.editModeActive) {
-    const { editModeSegment, editModeOriginalText } = pluginState;
-    if (editModeSegment) {
-      const currentText = view.state.doc.textBetween(
-        editModeSegment.from,
-        editModeSegment.to,
-        '',
-        '',
-      );
-      if (currentText !== (editModeOriginalText ?? '')) {
-        const markType = view.state.schema.marks.textState;
-        if (markType) {
-          const { tr } = view.state;
-          tr.addMark(
-            editModeSegment.from,
-            editModeSegment.to,
-            markType.create({ state: 'user-edited' }),
-          );
-          view.dispatch(tr);
-        }
-      }
-    }
-    view.dispatch(
-      view.state.tr.setMeta(markingPluginKey, {
-        ...pluginState,
-        editModeActive: false,
-        editModeSegment: null,
-        editModeOriginalText: null,
-        selectedRange: null,
-        selectionLevel: null,
-        clickCount: 0,
-        lastClickRegion: null,
-        decorations: DecorationSet.empty,
-      }),
-    );
-  }
-}
-
 // --- Helper: Clear selection ---
 
 export function clearMarkingSelection(view: EditorView): void {
@@ -541,8 +372,6 @@ export function clearMarkingSelection(view: EditorView): void {
         ...pluginState,
         selectedRange: null,
         selectionLevel: null,
-        clickCount: 0,
-        lastClickRegion: null,
         decorations: DecorationSet.empty,
       }),
     );

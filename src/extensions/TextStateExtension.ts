@@ -5,15 +5,15 @@ import type { TextState } from '@/types';
 
 const TEXT_STATE_CLASSES: Record<TextState, string> = {
   'user-written': '',
-  'ai-generated': 'bg-green-100 dark:bg-green-900/30',
-  'ai-pending': 'bg-green-200 dark:bg-green-800/40',
+  'ai-generated': 'bg-green-50 dark:bg-green-500/10',
+  'ai-pending': 'bg-green-100 dark:bg-green-400/15',
   'user-edited':
-    'underline decoration-blue-300 decoration-2 underline-offset-2',
-  'marked-preserve': 'bg-green-200 dark:bg-green-800/50 ring-1 ring-green-400',
+    'underline decoration-blue-300 dark:decoration-blue-400 decoration-2 underline-offset-2',
+  'marked-preserve': 'bg-green-100 dark:bg-green-400/20 ring-1 ring-green-400 dark:ring-green-500',
   'marked-delete':
-    'line-through decoration-red-500 decoration-2 bg-red-50 dark:bg-red-900/20',
+    'bg-red-100 text-red-800/80 dark:bg-red-500/20 dark:text-red-300/80',
   'original-removed':
-    'line-through decoration-red-400 decoration-2 bg-red-100 dark:bg-red-900/30 opacity-70',
+    'bg-red-50 text-gray-400 dark:bg-red-500/10 dark:text-gray-500',
 };
 
 /**
