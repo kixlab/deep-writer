@@ -245,6 +245,14 @@ export const MarkingExtension = Extension.create<MarkingExtensionOptions>({
       );
     }
 
+    function hasTextAtPos(doc: ProseMirrorNode, pos: number): boolean {
+      // Check if there's actual text content at or near this position
+      if (doc.content.size === 0) return false;
+      const resolved = doc.resolve(Math.min(pos, doc.content.size));
+      const parent = resolved.parent;
+      return parent.textContent.trim().length > 0;
+    }
+
     function processClick(view: EditorView, pos: number) {
       const { state } = view;
       const doc = state.doc;
@@ -263,8 +271,23 @@ export const MarkingExtension = Extension.create<MarkingExtensionOptions>({
         }
       }
 
+      // Don't process marking on empty paragraphs or non-text areas
+      if (!hasTextAtPos(doc, pos)) {
+        // Clear any existing selection
+        if (pluginState.selectedRange) {
+          view.dispatch(
+            view.state.tr.setMeta(markingPluginKey, getInitialState()),
+          );
+        }
+        return;
+      }
+
       // Progressive granularity logic
       const wordRange = getWordBoundary(doc, pos);
+
+      // Verify the word range actually contains text
+      const wordText = doc.textBetween(wordRange.from, wordRange.to, '', '').trim();
+      if (!wordText) return;
 
       let newClickCount: number;
       if (
@@ -298,42 +321,25 @@ export const MarkingExtension = Extension.create<MarkingExtensionOptions>({
           level = 'sentence';
       }
 
-      // If clicking again at max level (3+), toggle the mark
-      if (
-        pluginState.clickCount >= 3 &&
-        pluginState.lastClickRegion &&
-        rangesOverlap(wordRange, pluginState.lastClickRegion)
-      ) {
+      // First click: just select and highlight (no marking)
+      // Second click on same region: apply toggle (mark/unmark)
+      // Third click: expand to sentence and apply toggle
+      if (newClickCount >= 2) {
         applyToggle(view, selectedRange.from, selectedRange.to, level);
       }
 
-      // On second click at same level, toggle the mark
-      if (
-        newClickCount > 1 &&
-        pluginState.selectedRange &&
-        pluginState.selectionLevel === level
-      ) {
-        // Already at this level and clicking again - means we've expanded, not toggling
-        // Toggle happens when re-clicking at max level (handled above)
-      }
-
-      // Update plugin state
+      // Update plugin state with selection decoration
       const newState: MarkingPluginState = {
         ...pluginState,
         clickCount: newClickCount,
         lastClickRegion: selectedRange,
         selectionLevel: level,
         selectedRange,
-        decorations: DecorationSet.empty, // will be rebuilt
+        decorations: DecorationSet.empty,
       };
       newState.decorations = buildSelectionDecorations(newState, doc);
 
       view.dispatch(view.state.tr.setMeta(markingPluginKey, newState));
-
-      // If first click (word level), also apply toggle
-      if (newClickCount === 1) {
-        applyToggle(view, selectedRange.from, selectedRange.to, level);
-      }
     }
 
     return [
@@ -386,6 +392,9 @@ export const MarkingExtension = Extension.create<MarkingExtensionOptions>({
             // Don't handle if editor is not editable
             if (!view.editable) return false;
 
+            // Don't intercept clicks on empty documents or non-text areas
+            if (!hasTextAtPos(view.state.doc, pos)) return false;
+
             clearPendingClick();
 
             // Debounce to distinguish from double-click
@@ -397,7 +406,8 @@ export const MarkingExtension = Extension.create<MarkingExtensionOptions>({
               }
             }, 200);
 
-            return true;
+            // Return false to allow default cursor placement alongside marking
+            return false;
           },
 
           handleDoubleClick(view, pos) {
