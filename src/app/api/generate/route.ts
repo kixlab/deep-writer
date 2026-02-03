@@ -47,9 +47,16 @@ function buildUserPrompt(request: GenerateRequest): string {
 // --- Response Parsing ---
 
 function parseGenerateResponse(content: string): GenerateResponse | null {
-  // Try direct JSON parse first
+  // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
+  let cleaned = content.trim();
+  const fenceMatch = cleaned.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
+  }
+
+  // Try direct JSON parse
   try {
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(cleaned);
     if (parsed.gaps && Array.isArray(parsed.gaps)) {
       return parsed as GenerateResponse;
     }
@@ -57,8 +64,8 @@ function parseGenerateResponse(content: string): GenerateResponse | null {
     // Not valid JSON, try fallback
   }
 
-  // Fallback: extract JSON from prose/markdown response
-  const jsonMatch = content.match(/\{[\s\S]*"gaps"\s*:\s*\[[\s\S]*\][\s\S]*\}/);
+  // Fallback: extract JSON object containing "gaps" array from prose
+  const jsonMatch = cleaned.match(/\{[\s\S]*"gaps"\s*:\s*\[[\s\S]*?\]\s*\}/);
   if (jsonMatch) {
     try {
       const parsed = JSON.parse(jsonMatch[0]);
@@ -145,6 +152,7 @@ export async function POST(request: NextRequest) {
         ],
         temperature: 0.7,
         max_tokens: maxTokens,
+        response_format: { type: 'json_object' },
       },
       { signal: controller.signal },
     );
