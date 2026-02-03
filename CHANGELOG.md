@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added (SPEC-INTERACT-001: Marking Interaction and AI Generation)
+
+- Progressive granularity selection via MarkingExtension: click-based text selection expanding from word to phrase to sentence level within the TipTap editor
+- Word, phrase, and sentence boundary detection utilities (`src/lib/boundaries.ts`) operating on the ProseMirror document model, with 22 unit tests
+- Toggle marking behavior: single click marks text as `marked-delete` (red strikethrough), clicking marked text toggles it back to unmarked, preserved text can be toggled to deleted
+- Edit mode via double-click: double-clicking any text segment enters inline editing with the sentence as the edit region; changes tracked as `user-edited`
+- Regenerate button component (`src/components/editor/RegenerateButton.tsx`) that scans the document for `marked-delete` gaps, sends preserved text as constraints alongside the writing goal, and is disabled when no segments are marked
+- OpenAI GPT-4o server-side integration via Next.js App Router route handler at `src/app/api/generate/route.ts`, protecting the API key from client-side exposure
+- Structured prompt construction: document context with `[GAP:id]` markers, preserved text constraints, writing goal, and user request text
+- Response parsing with JSON extraction fallback for robustness against prose-wrapped API responses
+- Request validation, timeout handling (30 seconds), and structured error responses with retry indicators for rate limits, network errors, and parse failures
+- Generation service module (`src/services/generation.ts`) for document scanning, gap/constraint collection, prompt construction, and API communication
+- `useGeneration` React hook (`src/hooks/useGeneration.ts`) managing the full generation lifecycle: idle, loading, error, and complete states
+- Dual-mode prompt bar: selection mode replaces the selected text region via inline diff; continuation mode inserts AI-generated text at the cursor position with `ai-generated` mark
+- Inline diff display for AI replacements showing original text (red strikethrough) alongside replacement (green highlight), resolved independently by clicking
+- Loading state management during generation: skeleton placeholders in gap regions, spinner on the Regenerate button, loading indicator in the prompt bar, and read-only editor mode
+- Edge case handling: regenerating when all text is deleted generates a fresh draft from the writing goal; Regenerate button stays disabled when no marks exist
+- Generation pipeline TypeScript interfaces (`src/types/generation.ts`): GapInfo, ConstraintInfo, GenerateMode, GenerateRequest, GenerateResponse, GenerateError
+- New provenance event types: `prompt-request` and `diff-resolved` added to the event type union
+- Editor exposed via `forwardRef` in `CoWriThinkEditor` for external access by the generation hook and page-level orchestration
+- CSS styles for marking selection levels (word, phrase, sentence) and edit mode visual treatment
+
 ## [0.1.0] - 2026-02-03
 
 ### Added
