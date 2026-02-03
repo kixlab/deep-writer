@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
-import type { JSONContent } from '@tiptap/react';
+import type { JSONContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TextStateExtension } from '@/extensions/TextStateExtension';
 import { ProvenancePlugin } from '@/extensions/ProvenancePlugin';
@@ -10,6 +10,7 @@ import {
   DiffDecorationPlugin,
   updateDiffs,
 } from '@/extensions/DiffDecorationPlugin';
+import { MarkingExtension } from '@/extensions/MarkingExtension';
 import { useEditorStore } from '@/stores/useEditorStore';
 import { useLoadingStore } from '@/stores/useLoadingStore';
 import { useProvenanceStore } from '@/stores/useProvenanceStore';
@@ -17,6 +18,10 @@ import { useSessionStore } from '@/stores/useSessionStore';
 import type { EventType } from '@/types';
 
 // --- Types ---
+
+export interface CoWriThinkEditorHandle {
+  getEditor: () => Editor | null;
+}
 
 interface CoWriThinkEditorProps {
   initialContent?: JSONContent | string;
@@ -39,76 +44,85 @@ function handleProvenanceEvent(
 
 // --- Component ---
 
-export function CoWriThinkEditor({
-  initialContent = '',
-  onUpdate,
-  className = '',
-}: CoWriThinkEditorProps) {
-  const isReadOnly = useEditorStore((s) => s.isReadOnly);
-  const isGenerating = useLoadingStore((s) => s.isGenerating);
-  const activeDiffs = useEditorStore((s) => s.activeDiffs);
-  const editorRef = useRef<ReturnType<typeof useEditor>>(null);
+export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEditorProps>(
+  function CoWriThinkEditor(
+    { initialContent = '', onUpdate, className = '' },
+    ref,
+  ) {
+    const isReadOnly = useEditorStore((s) => s.isReadOnly);
+    const isGenerating = useLoadingStore((s) => s.isGenerating);
+    const activeDiffs = useEditorStore((s) => s.activeDiffs);
+    const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
-  // Diff interaction handler using getState() for fresh store access
-  const handleDiffInteraction = useRef(
-    (diffId: string, action: 'accept' | 'reject' | 'restore') => {
-      useEditorStore.getState().resolveDiff(diffId, action);
-      const event = useProvenanceStore.getState().logEvent('mark-applied', {
-        diffId,
-        action,
-      });
-      useSessionStore.getState().addProvenanceEvent(event);
+    // Diff interaction handler using getState() for fresh store access
+    const handleDiffInteraction = useRef(
+      (diffId: string, action: 'accept' | 'reject' | 'restore') => {
+        useEditorStore.getState().resolveDiff(diffId, action);
+        const event = useProvenanceStore.getState().logEvent('diff-resolved', {
+          diffId,
+          action,
+        });
+        useSessionStore.getState().addProvenanceEvent(event);
 
-      // Immediately update decorations with remaining pending diffs
-      if (editorRef.current) {
-        const pendingDiffs = useEditorStore.getState().getActiveDiffs();
-        updateDiffs(editorRef.current, pendingDiffs);
-      }
-    },
-  );
+        // Immediately update decorations with remaining pending diffs
+        if (editorRef.current) {
+          const pendingDiffs = useEditorStore.getState().getActiveDiffs();
+          updateDiffs(editorRef.current, pendingDiffs);
+        }
+      },
+    );
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      TextStateExtension,
-      ProvenancePlugin.configure({
-        onProvenanceEvent: handleProvenanceEvent,
-      }),
-      DiffDecorationPlugin.configure({
-        onDiffInteraction: (diffId, action) =>
-          handleDiffInteraction.current(diffId, action),
-      }),
-    ],
-    content: initialContent,
-    editable: !isReadOnly && !isGenerating,
-    onUpdate: ({ editor: ed }) => {
-      // Persist document state to session store
-      useSessionStore.getState().updateDocumentState(ed.getJSON());
-      // Call external callback if provided
-      onUpdate?.(ed.getHTML());
-    },
-  });
+    const editor = useEditor({
+      extensions: [
+        StarterKit,
+        TextStateExtension,
+        ProvenancePlugin.configure({
+          onProvenanceEvent: handleProvenanceEvent,
+        }),
+        DiffDecorationPlugin.configure({
+          onDiffInteraction: (diffId, action) =>
+            handleDiffInteraction.current(diffId, action),
+        }),
+        MarkingExtension.configure({
+          onProvenanceEvent: handleProvenanceEvent,
+        }),
+      ],
+      content: initialContent,
+      editable: !isReadOnly && !isGenerating,
+      onUpdate: ({ editor: ed }) => {
+        // Persist document state to session store
+        useSessionStore.getState().updateDocumentState(ed.getJSON());
+        // Call external callback if provided
+        onUpdate?.(ed.getHTML());
+      },
+    });
 
-  // Keep editor ref in sync
-  useEffect(() => {
-    editorRef.current = editor;
-  }, [editor]);
+    // Keep editor ref in sync
+    useEffect(() => {
+      editorRef.current = editor;
+    }, [editor]);
 
-  // Sync decoration state when activeDiffs change externally
-  useEffect(() => {
-    if (!editor) return;
-    const pendingDiffs = activeDiffs.filter((d) => d.state === 'pending');
-    updateDiffs(editor, pendingDiffs);
-  }, [editor, activeDiffs]);
+    // Expose editor instance to parent via ref
+    useImperativeHandle(ref, () => ({
+      getEditor: () => editor,
+    }), [editor]);
 
-  return (
-    <div
-      className={`min-h-[200px] rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900 ${className}`}
-    >
-      <EditorContent
-        editor={editor}
-        className="prose prose-sm max-w-none dark:prose-invert focus:outline-none"
-      />
-    </div>
-  );
-}
+    // Sync decoration state when activeDiffs change externally
+    useEffect(() => {
+      if (!editor) return;
+      const pendingDiffs = activeDiffs.filter((d) => d.state === 'pending');
+      updateDiffs(editor, pendingDiffs);
+    }, [editor, activeDiffs]);
+
+    return (
+      <div
+        className={`min-h-[200px] rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900 ${className}`}
+      >
+        <EditorContent
+          editor={editor}
+          className="prose prose-sm max-w-none dark:prose-invert focus:outline-none"
+        />
+      </div>
+    );
+  },
+);

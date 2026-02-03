@@ -1,29 +1,37 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import type { Editor } from '@tiptap/core';
 import { useLoadingStore } from '@/stores/useLoadingStore';
 
 // --- Types ---
 
 interface PromptBarProps {
-  onSubmit?: (prompt: string) => void;
+  editor?: Editor | null;
+  goal?: string;
+  onSubmit?: (prompt: string, mode: 'selection' | 'continuation') => void;
   disabled?: boolean;
 }
 
 // --- Component ---
 
-export function PromptBar({ onSubmit, disabled }: PromptBarProps) {
+export function PromptBar({ editor, goal, onSubmit, disabled }: PromptBarProps) {
   const [prompt, setPrompt] = useState('');
   const isGenerating = useLoadingStore((s) => s.isGenerating);
 
   const isDisabled = disabled || isGenerating;
 
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
     const trimmed = prompt.trim();
     if (!trimmed || isDisabled) return;
-    onSubmit?.(trimmed);
+
+    // Detect mode from editor selection state
+    const mode: 'selection' | 'continuation' =
+      editor && !editor.state.selection.empty ? 'selection' : 'continuation';
+
+    onSubmit?.(trimmed, mode);
     setPrompt('');
-  };
+  }, [prompt, isDisabled, editor, onSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

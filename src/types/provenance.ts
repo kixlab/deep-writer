@@ -4,6 +4,8 @@ export type EventType =
   | 'ai-generation-received'
   | 'mark-applied'
   | 'edit-in-place'
+  | 'prompt-request'
+  | 'diff-resolved'
   | 'pushback-shown'
   | 'pushback-response'
   | 'process2-shown'

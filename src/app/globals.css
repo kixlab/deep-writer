@@ -40,3 +40,46 @@
     background-color: rgba(6, 78, 59, 0.6);
   }
 }
+
+/* Marking selection styles */
+.marking-selection-word {
+  background-color: rgb(219 234 254);
+  border-radius: 2px;
+}
+
+.marking-selection-phrase {
+  background-color: rgb(199 210 254);
+  border-bottom: 2px dashed rgb(129 140 248);
+  border-radius: 2px;
+}
+
+.marking-selection-sentence {
+  background-color: rgb(224 231 255);
+  border-bottom: 2px solid rgb(99 102 241);
+  border-radius: 2px;
+}
+
+.marking-edit-mode {
+  outline: 2px solid rgb(96 165 250);
+  outline-offset: 1px;
+  border-radius: 2px;
+  background-color: rgb(239 246 255);
+}
+
+@media (prefers-color-scheme: dark) {
+  .marking-selection-word {
+    background-color: rgba(59, 130, 246, 0.15);
+  }
+  .marking-selection-phrase {
+    background-color: rgba(99, 102, 241, 0.2);
+    border-bottom-color: rgba(129, 140, 248, 0.6);
+  }
+  .marking-selection-sentence {
+    background-color: rgba(99, 102, 241, 0.15);
+    border-bottom-color: rgba(99, 102, 241, 0.6);
+  }
+  .marking-edit-mode {
+    outline-color: rgba(96, 165, 250, 0.6);
+    background-color: rgba(59, 130, 246, 0.1);
+  }
+}
