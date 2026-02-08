@@ -4,7 +4,11 @@ import { useEditorStore } from '@/stores/useEditorStore';
 import { useLoadingStore } from '@/stores/useLoadingStore';
 import { useProvenanceStore } from '@/stores/useProvenanceStore';
 import { useSessionStore } from '@/stores/useSessionStore';
+import { useRoundStore } from '@/stores/useRoundStore';
+import { useContributionGraphStore } from '@/stores/useContributionGraphStore';
+import { useConstraintStore } from '@/stores/useConstraintStore';
 import { updateDiffs } from '@/extensions/DiffDecorationPlugin';
+import { computeD1Base, computeD2Base, computeD3Base } from '@/lib/scoring';
 import type { EventType } from '@/types';
 import {
   scanDocument,
@@ -29,6 +33,21 @@ export interface GenerationState {
 function logProvenance(type: EventType, data: Record<string, unknown>) {
   const event = useProvenanceStore.getState().logEvent(type, data);
   useSessionStore.getState().addProvenanceEvent(event);
+}
+
+/**
+ * Collect unique, non-null roundId values from textState marks in a document range.
+ */
+function collectRoundIds(editor: Editor, from: number, to: number): string[] {
+  const roundIds = new Set<string>();
+  editor.state.doc.nodesBetween(from, to, (node) => {
+    if (!node.isText) return;
+    const textStateMark = node.marks.find((m) => m.type.name === 'textState');
+    if (textStateMark?.attrs?.roundId) {
+      roundIds.add(textStateMark.attrs.roundId as string);
+    }
+  });
+  return Array.from(roundIds);
 }
 
 // --- Hook ---
@@ -70,6 +89,47 @@ export function useGeneration() {
       // Build request and call API
       const request = buildRequest(goal, scan, 'regenerate');
       const response = await callGenerateAPI(request);
+
+      // Collect parentRounds from gaps being replaced
+      const parentRoundIds: string[] = [];
+      for (const gap of scan.gaps) {
+        const ids = collectRoundIds(editor, gap.position.from, gap.position.from + gap.originalText.length);
+        for (const id of ids) {
+          if (!parentRoundIds.includes(id)) parentRoundIds.push(id);
+        }
+      }
+
+      // Get constraint info
+      const constraintState = useConstraintStore.getState();
+      const constraintTypes = [...new Set(constraintState.constraints.map(c => c.type))];
+
+      // Create round
+      const round = useRoundStore.getState().createRound({
+        type: 'generation',
+        parentRounds: parentRoundIds,
+        prompt: goal,
+        promptLength: goal.length,
+        constraintCount: constraintState.constraints.length,
+        constraintTypes,
+        generationMode: 'regenerate',
+        diffActions: { accepted: 0, rejected: 0, edited: 0 },
+        events: [],
+      });
+
+      // Create graph node with base scores
+      const d1 = computeD1Base('ai-generated', 'generation');
+      const d2 = computeD2Base({
+        promptLength: goal.length,
+        constraintCount: constraintState.constraints.length,
+        type: 'generation',
+      });
+      const d3 = computeD3Base('accepted');
+      useContributionGraphStore.getState().addNode(round.roundId, { d1, d2, d3 }, {
+        prompt: goal,
+        constraints: constraintTypes,
+        action: 'accepted',
+        type: 'generation',
+      });
 
       // Apply gap fills as diffs
       for (const gapFill of response.gaps) {
@@ -136,6 +196,41 @@ export function useGeneration() {
 
       const response = await callGenerateAPI(request);
 
+      // Collect parentRounds from selection range
+      const parentRoundIds = selection.empty ? [] : collectRoundIds(editor, selection.from, selection.to);
+
+      // Get constraint info
+      const constraintState = useConstraintStore.getState();
+      const constraintTypes = [...new Set(constraintState.constraints.map(c => c.type))];
+
+      // Create round
+      const round = useRoundStore.getState().createRound({
+        type: 'generation',
+        parentRounds: parentRoundIds,
+        prompt: promptText,
+        promptLength: promptText.length,
+        constraintCount: constraintState.constraints.length,
+        constraintTypes,
+        generationMode: mode,
+        diffActions: { accepted: 0, rejected: 0, edited: 0 },
+        events: [],
+      });
+
+      // Create graph node with base scores
+      const d1 = computeD1Base('ai-generated', 'generation');
+      const d2 = computeD2Base({
+        promptLength: promptText.length,
+        constraintCount: constraintState.constraints.length,
+        type: 'generation',
+      });
+      const d3 = computeD3Base('accepted');
+      useContributionGraphStore.getState().addNode(round.roundId, { d1, d2, d3 }, {
+        prompt: promptText,
+        constraints: constraintTypes,
+        action: 'accepted',
+        type: 'generation',
+      });
+
       if (mode === 'selection' && response.gaps.length > 0) {
         // Apply as diff for selection mode
         const gap = request.gaps[0];
@@ -152,20 +247,36 @@ export function useGeneration() {
         const gapFill = response.gaps[0];
         const cursorPos = selection.from;
 
-        // Insert as ai-generated text
-        const { tr } = editor.state;
-        tr.insertText(gapFill.text, cursorPos);
+        // Split on double newlines to create proper paragraph structure
+        const paragraphs = gapFill.text.split(/\n\n+/).map(p => p.replace(/\n/g, ' ').trim()).filter(Boolean);
 
-        // Apply ai-generated mark to the inserted text
-        const markType = editor.schema.marks.textState;
-        if (markType) {
-          tr.addMark(
-            cursorPos,
-            cursorPos + gapFill.text.length,
-            markType.create({ state: 'ai-generated' }),
-          );
+        if (paragraphs.length <= 1) {
+          // Single paragraph - use simple insertText with mark
+          const text = (paragraphs[0] ?? gapFill.text).trim();
+          const { tr } = editor.state;
+          tr.insertText(text, cursorPos);
+
+          const markType = editor.schema.marks.textState;
+          if (markType) {
+            tr.addMark(
+              cursorPos,
+              cursorPos + text.length,
+              markType.create({ state: 'ai-generated', roundId: round.roundId }),
+            );
+          }
+          editor.view.dispatch(tr);
+        } else {
+          // Multiple paragraphs - insert as structured content with proper <p> nodes
+          const content = paragraphs.map(text => ({
+            type: 'paragraph' as const,
+            content: [{
+              type: 'text' as const,
+              text,
+              marks: [{ type: 'textState', attrs: { state: 'ai-generated', roundId: round.roundId } }],
+            }],
+          }));
+          editor.chain().insertContentAt(cursorPos, content).run();
         }
-        editor.view.dispatch(tr);
       }
 
       // Log response provenance

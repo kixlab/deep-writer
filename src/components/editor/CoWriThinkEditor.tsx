@@ -10,13 +10,22 @@ import {
   DiffDecorationPlugin,
   updateDiffs,
 } from '@/extensions/DiffDecorationPlugin';
-import { MarkingExtension } from '@/extensions/MarkingExtension';
-import type { DragSelectionData } from '@/extensions/MarkingExtension';
+import {
+  ConstraintDecorationPlugin,
+  updateConstraintDecorations,
+} from '@/extensions/ConstraintDecorationPlugin';
+import { MarkingExtension, clearMarkingSelection, expandMarkingSelection } from '@/extensions/MarkingExtension';
+import type { DragSelectionData, ConstraintData, ExpandLevel } from '@/extensions/MarkingExtension';
 import { AlternativesTooltip } from '@/components/editor/AlternativesTooltip';
+import { AddContextTooltip } from '@/components/editor/AddContextTooltip';
 import { useEditorStore } from '@/stores/useEditorStore';
+import { useConstraintStore } from '@/stores/useConstraintStore';
 import { useLoadingStore } from '@/stores/useLoadingStore';
 import { useProvenanceStore } from '@/stores/useProvenanceStore';
 import { useSessionStore } from '@/stores/useSessionStore';
+import { useRoundStore } from '@/stores/useRoundStore';
+import { useContributionGraphStore } from '@/stores/useContributionGraphStore';
+import { computeD1Base, computeD2Base, computeD3Base } from '@/lib/scoring';
 import type { EventType } from '@/types';
 
 // --- Types ---
@@ -48,13 +57,38 @@ function handleProvenanceEvent(
 // TipTap captures extension options once, so the callback must be stable.
 // This mirrors the handleProvenanceEvent pattern above.
 let _setTooltipData: ((data: DragSelectionData | null) => void) | null = null;
+let _resetActiveLevel: (() => void) | null = null;
+let _originalFrom = 0;
+let _originalTo = 0;
 
 function handleDragSelection(data: DragSelectionData) {
+  _originalFrom = data.from;
+  _originalTo = data.to;
+  _resetActiveLevel?.();
   _setTooltipData?.(data);
 }
 
 function dismissTooltip() {
   _setTooltipData?.(null);
+}
+
+function handleConstraintAdd(data: ConstraintData) {
+  useConstraintStore.getState().addConstraint(data.type, data.text, data.from, data.to);
+}
+
+/**
+ * Collect unique, non-null roundId values from textState marks in a document range.
+ */
+function collectRoundIds(editor: Editor, from: number, to: number): string[] {
+  const roundIds = new Set<string>();
+  editor.state.doc.nodesBetween(from, to, (node) => {
+    if (!node.isText) return;
+    const textStateMark = node.marks.find((m) => m.type.name === 'textState');
+    if (textStateMark?.attrs?.roundId) {
+      roundIds.add(textStateMark.attrs.roundId as string);
+    }
+  });
+  return Array.from(roundIds);
 }
 
 // --- Component ---
@@ -68,13 +102,54 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
     const isGenerating = useLoadingStore((s) => s.isGenerating);
     const activeDiffs = useEditorStore((s) => s.activeDiffs);
     const sessionGoal = useSessionStore((s) => s.session?.goal ?? '');
+    const constraints = useConstraintStore((s) => s.constraints);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
     // Drag-selection tooltip state
     const [tooltipData, setTooltipData] = useState<DragSelectionData | null>(null);
+    const [activeLevel, setActiveLevel] = useState<ExpandLevel | 'word'>('word');
     const handleTooltipDismiss = useCallback(() => {
       setTooltipData(null);
+      setActiveLevel('word');
+      // Clear the marking decoration when tooltip is dismissed
+      if (editorRef.current?.view) {
+        clearMarkingSelection(editorRef.current.view);
+      }
     }, []);
+
+    const handleExpandSelection = useCallback((level: ExpandLevel) => {
+      if (!editorRef.current?.view || !tooltipData) return;
+      const view = editorRef.current.view;
+      const explicit = level === 'word' ? { from: _originalFrom, to: _originalTo } : undefined;
+      const result = expandMarkingSelection(view, level, _originalFrom, explicit);
+      if (!result) return;
+
+      setActiveLevel(level);
+
+      const doc = view.state.doc;
+      const docSize = doc.content.size;
+      const contextStart = Math.max(0, result.from - 200);
+      const contextEnd = Math.min(docSize, result.to + 200);
+      const context = doc.textBetween(contextStart, contextEnd, ' ');
+
+      // Use ProseMirror coordsAtPos for rect computation (works without DOM focus)
+      const coordsFrom = view.coordsAtPos(result.from);
+      const coordsTo = view.coordsAtPos(result.to);
+      const rect = new DOMRect(
+        coordsFrom.left,
+        coordsFrom.top,
+        coordsTo.right - coordsFrom.left,
+        coordsTo.bottom - coordsFrom.top,
+      );
+
+      setTooltipData({
+        from: result.from,
+        to: result.to,
+        text: result.text,
+        context,
+        rect,
+      });
+    }, [tooltipData]);
 
     // Diff interaction handler using getState() for fresh store access
     const handleDiffInteraction = useRef(
@@ -105,9 +180,11 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
           onDiffInteraction: (diffId, action) =>
             handleDiffInteraction.current(diffId, action),
         }),
+        ConstraintDecorationPlugin,
         MarkingExtension.configure({
           onProvenanceEvent: handleProvenanceEvent,
           onDragSelection: handleDragSelection,
+          onConstraintAdd: handleConstraintAdd,
         }),
       ],
       content: initialContent,
@@ -131,8 +208,10 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
     // can set React state even though TipTap captured options once.
     useEffect(() => {
       _setTooltipData = setTooltipData;
+      _resetActiveLevel = () => setActiveLevel('word');
       return () => {
         _setTooltipData = null;
+        _resetActiveLevel = null;
       };
     }, []);
 
@@ -148,6 +227,12 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
       updateDiffs(editor, pendingDiffs);
     }, [editor, activeDiffs]);
 
+    // Sync constraint decorations when constraints change
+    useEffect(() => {
+      if (!editor) return;
+      updateConstraintDecorations(editor, constraints);
+    }, [editor, constraints]);
+
     return (
       <div
         className={`flex-1 text-gray-900 dark:text-gray-100 ${className}`}
@@ -157,20 +242,84 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
           className="prose prose-sm max-w-none dark:prose-invert focus:outline-none"
         />
         {tooltipData && editor && (
-          <AlternativesTooltip
-            selectionRect={tooltipData.rect}
-            selectedText={tooltipData.text}
-            context={tooltipData.context}
-            goal={sessionGoal}
-            onReplace={(alternative) => {
-              editor.chain().focus().insertContentAt(
-                { from: tooltipData.from, to: tooltipData.to },
-                alternative,
-              ).run();
-              setTooltipData(null);
-            }}
-            onDismiss={handleTooltipDismiss}
-          />
+          <>
+            <AddContextTooltip
+              selectionRect={tooltipData.rect}
+              onAddContext={() => {
+                useConstraintStore.getState().addConstraint(
+                  'context', tooltipData.text, tooltipData.from, tooltipData.to,
+                );
+              }}
+              onDismiss={handleTooltipDismiss}
+            />
+            <AlternativesTooltip
+              selectionRect={tooltipData.rect}
+              selectedText={tooltipData.text}
+              context={tooltipData.context}
+              goal={sessionGoal}
+              onReplace={(alternative) => {
+                // Collect parentRounds from the text being replaced
+                const parentRoundIds = collectRoundIds(editor, tooltipData.from, tooltipData.to);
+
+                // Create alternative round
+                const round = useRoundStore.getState().createRound({
+                  type: 'alternative',
+                  parentRounds: parentRoundIds,
+                  prompt: null,
+                  promptLength: 0,
+                  constraintCount: 0,
+                  constraintTypes: [],
+                  generationMode: 'alternative',
+                  diffActions: { accepted: 0, rejected: 0, edited: 0 },
+                  events: [],
+                });
+
+                // Create graph node with base scores
+                const d1 = computeD1Base('ai-generated', 'alternative');
+                const d2 = computeD2Base({
+                  promptLength: 0,
+                  constraintCount: 0,
+                  type: 'alternative',
+                });
+                const d3 = computeD3Base('alt-selected');
+                useContributionGraphStore.getState().addNode(round.roundId, { d1, d2, d3 }, {
+                  prompt: null,
+                  constraints: [],
+                  action: 'alt-selected',
+                  type: 'alternative',
+                });
+
+                if (activeLevel === 'paragraph') {
+                  // Paragraph mode: creates diff (roundId not applied to text yet)
+                  useEditorStore.getState().addDiff(
+                    tooltipData.text,
+                    alternative,
+                    tooltipData.from,
+                  );
+                  const activeDiffs = useEditorStore.getState().getActiveDiffs();
+                  updateDiffs(editor, activeDiffs);
+                  handleTooltipDismiss();
+                } else {
+                  // Word/sentence mode: direct insertion with roundId mark
+                  const { tr } = editor.state;
+                  tr.insertText(alternative, tooltipData.from, tooltipData.to);
+                  const markType = editor.schema.marks.textState;
+                  if (markType) {
+                    tr.addMark(
+                      tooltipData.from,
+                      tooltipData.from + alternative.length,
+                      markType.create({ state: 'ai-generated', roundId: round.roundId }),
+                    );
+                  }
+                  editor.view.dispatch(tr);
+                  setTooltipData(null);
+                }
+              }}
+              onDismiss={handleTooltipDismiss}
+              onExpandSelection={handleExpandSelection}
+              activeLevel={activeLevel}
+            />
+          </>
         )}
       </div>
     );

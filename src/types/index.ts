@@ -10,3 +10,15 @@ export type {
   GenerateResponse,
   GenerateError,
 } from './generation';
+export type {
+  RoundType,
+  Dimension,
+  ContributionLevel,
+  RoundMetadata,
+  Edge,
+  RoundNodeScores,
+  RoundNodeMetadata,
+  RoundNodeNarrative,
+  RoundNode,
+  RoundAnalysis,
+} from './contribution';

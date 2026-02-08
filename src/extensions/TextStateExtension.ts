@@ -5,13 +5,11 @@ import type { TextState } from '@/types';
 
 const TEXT_STATE_CLASSES: Record<TextState, string> = {
   'user-written': '',
-  'ai-generated': 'bg-green-50 dark:bg-green-500/10',
-  'ai-pending': 'bg-green-100 dark:bg-green-400/15',
-  'user-edited':
-    'underline decoration-blue-300 dark:decoration-blue-400 decoration-2 underline-offset-2',
-  'marked-preserve': 'bg-green-100 dark:bg-green-400/20 ring-1 ring-green-400 dark:ring-green-500',
-  'marked-delete':
-    'bg-red-100 text-red-800/80 dark:bg-red-500/20 dark:text-red-300/80',
+  'ai-generated': '',
+  'ai-pending': '',
+  'user-edited': '',
+  'marked-preserve': '',
+  'marked-delete': '',
   'original-removed':
     'bg-red-50 text-gray-400 dark:bg-red-500/10 dark:text-gray-500',
 };
@@ -31,7 +29,7 @@ declare module '@tiptap/core' {
       /**
        * Apply a text state mark to the current selection.
        */
-      setTextState: (state: TextState) => ReturnType;
+      setTextState: (state: TextState, roundId?: string | null) => ReturnType;
       /**
        * Remove text state mark from the current selection.
        */
@@ -63,6 +61,15 @@ export const TextStateExtension = Mark.create({
           };
         },
       },
+      roundId: {
+        default: null,
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('data-round-id') || null,
+        renderHTML: (attributes: Record<string, unknown>) => {
+          if (!attributes.roundId) return {};
+          return { 'data-round-id': attributes.roundId };
+        },
+      },
     };
   },
 
@@ -81,9 +88,9 @@ export const TextStateExtension = Mark.create({
   addCommands() {
     return {
       setTextState:
-        (state: TextState) =>
+        (state: TextState, roundId?: string | null) =>
         ({ commands }) => {
-          return commands.setMark(this.name, { state });
+          return commands.setMark(this.name, { state, roundId: roundId ?? null });
         },
 
       unsetTextState:
