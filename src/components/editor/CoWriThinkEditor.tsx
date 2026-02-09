@@ -26,6 +26,7 @@ import { useInspectStore } from '@/stores/useInspectStore';
 import { MarkingExtension, clearMarkingSelection, expandMarkingSelection } from '@/extensions/MarkingExtension';
 import type { DragSelectionData, ConstraintData, ExpandLevel } from '@/extensions/MarkingExtension';
 import { AlternativesTooltip } from '@/components/editor/AlternativesTooltip';
+import { AlternativesButton } from '@/components/editor/AlternativesButton';
 import { useEditorStore } from '@/stores/useEditorStore';
 import { useConstraintStore } from '@/stores/useConstraintStore';
 import { useLoadingStore } from '@/stores/useLoadingStore';
@@ -62,9 +63,9 @@ function handleProvenanceEvent(
   useSessionStore.getState().addProvenanceEvent(event);
 }
 
-// Module-level mutable ref for drag-selection tooltip.
-// TipTap captures extension options once, so the callback must be stable.
-// This mirrors the handleProvenanceEvent pattern above.
+// Module-level mutable refs for two-step alternative generation.
+// TipTap captures extension options once, so callbacks must be stable.
+let _setSelectionData: ((data: DragSelectionData | null) => void) | null = null;
 let _setTooltipData: ((data: DragSelectionData | null) => void) | null = null;
 let _resetActiveLevel: (() => void) | null = null;
 let _originalFrom = 0;
@@ -74,10 +75,12 @@ function handleDragSelection(data: DragSelectionData) {
   _originalFrom = data.from;
   _originalTo = data.to;
   _resetActiveLevel?.();
-  _setTooltipData?.(data);
+  // Show button first, not tooltip
+  _setSelectionData?.(data);
 }
 
-function dismissTooltip() {
+function dismissSelection() {
+  _setSelectionData?.(null);
   _setTooltipData?.(null);
 }
 
@@ -116,13 +119,30 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
     const graphNodeCount = useContributionGraphStore((s) => s.nodes.size);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
-    // Drag-selection tooltip state
+    // Two-step alternative generation: selection button → tooltip
+    const [selectionData, setSelectionData] = useState<DragSelectionData | null>(null);
     const [tooltipData, setTooltipData] = useState<DragSelectionData | null>(null);
     const [activeLevel, setActiveLevel] = useState<ExpandLevel | 'word'>('word');
+
+    const handleSelectionDismiss = useCallback(() => {
+      setSelectionData(null);
+      setTooltipData(null);
+      setActiveLevel('word');
+      if (editorRef.current?.view) {
+        clearMarkingSelection(editorRef.current.view);
+      }
+    }, []);
+
+    const handleGenerateAlternatives = useCallback(() => {
+      if (!selectionData) return;
+      // Move from selection button to tooltip
+      setTooltipData(selectionData);
+      setSelectionData(null);
+    }, [selectionData]);
+
     const handleTooltipDismiss = useCallback(() => {
       setTooltipData(null);
       setActiveLevel('word');
-      // Clear the marking decoration when tooltip is dismissed
       if (editorRef.current?.view) {
         clearMarkingSelection(editorRef.current.view);
       }
@@ -209,8 +229,8 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
       onUpdate: ({ editor: ed }) => {
         // Persist document state to session store
         useSessionStore.getState().updateDocumentState(ed.getJSON());
-        // Dismiss drag-selection tooltip when document content changes
-        dismissTooltip();
+        // Dismiss selection/tooltip when document content changes
+        dismissSelection();
         // Call external callback if provided
         onUpdate?.(ed.getHTML());
       },
@@ -221,12 +241,14 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
       editorRef.current = editor;
     }, [editor]);
 
-    // Wire up the module-level tooltip callback so the MarkingExtension
+    // Wire up the module-level callbacks so the MarkingExtension
     // can set React state even though TipTap captured options once.
     useEffect(() => {
+      _setSelectionData = setSelectionData;
       _setTooltipData = setTooltipData;
       _resetActiveLevel = () => setActiveLevel('word');
       return () => {
+        _setSelectionData = null;
         _setTooltipData = null;
         _resetActiveLevel = null;
       };
@@ -294,6 +316,13 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
           editor={editor}
           className="prose prose-sm max-w-none dark:prose-invert focus:outline-none"
         />
+        {selectionData && !tooltipData && (
+          <AlternativesButton
+            selectionRect={selectionData.rect}
+            onGenerate={handleGenerateAlternatives}
+            onDismiss={handleSelectionDismiss}
+          />
+        )}
         {tooltipData && editor && (
           <>
             <AlternativesTooltip

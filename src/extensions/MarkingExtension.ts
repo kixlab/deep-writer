@@ -211,7 +211,7 @@ export const MarkingExtension = Extension.create<MarkingExtensionOptions>({
           },
 
           handleDoubleClick(view, pos) {
-            if (useInspectStore.getState().isInspectMode) return false;
+            // Alternative generation now works in all modes (removed isInspectMode check)
             if (!view.editable) return false;
             if (hasActiveDiffAtPos(view, pos)) return false;
             if (!hasTextAtPos(view.state.doc, pos)) return false;
@@ -296,10 +296,7 @@ export const MarkingExtension = Extension.create<MarkingExtensionOptions>({
             mouseup: (view: EditorView, event: Event) => {
               const e = event as MouseEvent;
 
-              if (useInspectStore.getState().isInspectMode) {
-                mouseDownCoords = null;
-                return false;
-              }
+              // Alternative generation now works in all modes (removed isInspectMode check)
 
               if (!mouseDownCoords || !onDragSelection) {
                 mouseDownCoords = null;

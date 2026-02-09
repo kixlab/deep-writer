@@ -317,18 +317,27 @@ export function useGeneration() {
             paragraphCount: paragraphs.length,
             totalChars: paragraphs.join('').length
           });
-          editor.chain().insertContentAt(cursorPos, content).run();
+          editor.chain().setMeta('programmaticTextState', true).insertContentAt(cursorPos, content).run();
         }
 
         // Verify marks were applied
         setTimeout(() => {
           let foundMarks = 0;
           let foundRoundId = false;
-          editor.state.doc.descendants((node) => {
+          const markSamples: any[] = [];
+          editor.state.doc.descendants((node, pos) => {
             if (node.isText) {
               const textStateMark = node.marks.find(m => m.type.name === 'textState');
               if (textStateMark) {
                 foundMarks++;
+                if (markSamples.length < 3) {
+                  markSamples.push({
+                    pos,
+                    text: node.text?.slice(0, 30),
+                    state: textStateMark.attrs.state,
+                    roundId: textStateMark.attrs.roundId,
+                  });
+                }
                 if (textStateMark.attrs.roundId === round.roundId) {
                   foundRoundId = true;
                 }
@@ -336,9 +345,10 @@ export function useGeneration() {
             }
           });
           console.log('[DEBUG] 마크 검증:', {
-            roundId: round.roundId,
+            expectedRoundId: round.roundId,
             foundMarks,
-            foundRoundId: foundRoundId ? '✅' : '❌'
+            foundRoundId: foundRoundId ? '✅' : '❌',
+            markSamples
           });
         }, 100);
       }
