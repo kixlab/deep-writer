@@ -12,7 +12,7 @@ import { TextStateExtension } from '@/extensions/TextStateExtension';
 import type { DiffHighlight } from '@/lib/diffCompute';
 import { computeDiffViews } from '@/lib/diffCompute';
 import { useSyncScroll } from '@/hooks/useSyncScroll';
-import { getPhraseBoundary } from '@/lib/boundaries';
+import { getWordBoundary } from '@/lib/boundaries';
 import { KeepDeleteTooltip } from '@/components/editor/KeepDeleteTooltip';
 
 // --- Highlight Extension (lightweight, read-only decorations) ---
@@ -148,7 +148,7 @@ export function DiffSplitView({ editor, pendingDiffs, onModifiedEditorReady }: D
     [onModifiedEditorReady],
   );
 
-  // Handle mouseup on Modified panel: snap selection to clause boundaries
+  // Handle mouseup on Modified panel: snap selection to word boundaries
   const handleModifiedMouseUp = useCallback(() => {
     const modEditor = modifiedEditorRef.current;
     if (!modEditor || modEditor.isDestroyed) return;
@@ -161,9 +161,9 @@ export function DiffSplitView({ editor, pendingDiffs, onModifiedEditorReady }: D
 
     const doc = modEditor.state.doc;
 
-    // Snap both endpoints to the nearest phrase (clause) boundary
-    const startBoundary = getPhraseBoundary(doc, from);
-    const endBoundary = getPhraseBoundary(doc, to);
+    // Snap both endpoints to the nearest word boundary
+    const startBoundary = getWordBoundary(doc, from);
+    const endBoundary = getWordBoundary(doc, to);
     const snappedFrom = startBoundary.from;
     const snappedTo = endBoundary.to;
 
