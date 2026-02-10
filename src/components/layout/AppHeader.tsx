@@ -19,6 +19,8 @@ interface AppHeaderProps {
 export function AppHeader({ goal, theme, onGoalEdit, onNewSession, onToggleTheme }: AppHeaderProps) {
   const isInspectMode = useInspectStore((s) => s.isInspectMode);
   const toggleInspectMode = useInspectStore((s) => s.toggleInspectMode);
+  const isHighlightMode = useInspectStore((s) => s.isHighlightMode);
+  const toggleHighlightMode = useInspectStore((s) => s.toggleHighlightMode);
 
   return (
     <header className="flex h-14 shrink-0 items-center border-b border-gray-200 bg-white px-4 dark:border-gray-700 dark:bg-gray-900">
@@ -35,12 +37,29 @@ export function AppHeader({ goal, theme, onGoalEdit, onNewSession, onToggleTheme
 
         <div className="ml-4 flex shrink-0 items-center gap-2">
           <button
+            onClick={toggleHighlightMode}
+            className={
+              isHighlightMode
+                ? 'rounded-lg border border-purple-300 bg-purple-50 p-1.5 text-purple-700 transition-colors hover:bg-purple-100 dark:border-purple-600 dark:bg-purple-900/30 dark:text-purple-400 dark:hover:bg-purple-900/50'
+                : 'rounded-lg border border-gray-300 p-1.5 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
+            }
+            title="Highlight Mode"
+            aria-label={isHighlightMode ? 'Hide reliance highlights' : 'Show reliance highlights'}
+            aria-pressed={isHighlightMode}
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </button>
+          <button
             onClick={toggleInspectMode}
             className={
               isInspectMode
                 ? 'rounded-lg border border-blue-300 bg-blue-50 p-1.5 text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-600 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50'
                 : 'rounded-lg border border-gray-300 p-1.5 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
             }
+            title="Inspect Mode"
             aria-label={isInspectMode ? 'Exit inspect mode' : 'Toggle inspect mode'}
             aria-pressed={isInspectMode}
           >
@@ -53,6 +72,7 @@ export function AppHeader({ goal, theme, onGoalEdit, onNewSession, onToggleTheme
             <button
               onClick={onToggleTheme}
               className="rounded-lg border border-gray-300 p-1.5 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+              title="Night Mode"
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             >
               {theme === 'dark' ? (

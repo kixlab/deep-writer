@@ -116,6 +116,7 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
     const sessionGoal = useSessionStore((s) => s.session?.goal ?? '');
     const constraints = useConstraintStore((s) => s.constraints);
     const isInspectMode = useInspectStore((s) => s.isInspectMode);
+    const isHighlightMode = useInspectStore((s) => s.isHighlightMode);
     const graphNodeCount = useContributionGraphStore((s) => s.nodes.size);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
@@ -289,24 +290,24 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
       updateConstraintDecorations(editor, constraints);
     }, [editor, constraints]);
 
-    // Sync contribution overlay when inspect mode changes
+    // Sync contribution overlay when inspect mode or highlight mode changes
     useEffect(() => {
       if (!editor) return;
       // Suppress overlay during active diff review (REQ-VIS-026)
       const hasPending = useEditorStore.getState().activeDiffs.some((d) => d.state === 'pending');
-      const shouldActivate = isInspectMode && !hasPending;
+      const shouldActivate = (isInspectMode || isHighlightMode) && !hasPending;
       const scoreAccessor: ScoreAccessor = (roundId, dimension) =>
         useContributionGraphStore.getState().accumulatedScore(roundId, dimension);
       updateContributionOverlay(editor, shouldActivate, scoreAccessor);
-    }, [editor, isInspectMode, activeDiffs]);
+    }, [editor, isInspectMode, isHighlightMode, activeDiffs]);
 
     // Refresh contribution overlay when graph scores update
     useEffect(() => {
-      if (!editor || !isInspectMode) return;
+      if (!editor || !(isInspectMode || isHighlightMode)) return;
       const scoreAccessor: ScoreAccessor = (roundId, dimension) =>
         useContributionGraphStore.getState().accumulatedScore(roundId, dimension);
       refreshContributionScores(editor, scoreAccessor);
-    }, [editor, isInspectMode, graphNodeCount]);
+    }, [editor, isInspectMode, isHighlightMode, graphNodeCount]);
 
     return (
       <div
