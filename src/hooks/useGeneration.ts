@@ -13,7 +13,6 @@ import type { EventType } from '@/types';
 import {
   scanDocument,
   buildRequest,
-  buildPromptBarRequest,
   buildSmartEditRequest,
   callGenerateAPI,
   GenerationError,
@@ -179,148 +178,6 @@ export function useGeneration() {
   }, []);
 
   /**
-   * Execute a prompt bar request: selection replacement or cursor continuation.
-   * Used by the PromptBar component.
-   */
-  const promptRequest = useCallback(async (
-    editor: Editor,
-    goal: string,
-    promptText: string,
-  ) => {
-    const { selection } = editor.state;
-    const mode = selection.empty ? 'continuation' : 'selection';
-
-    setState({ status: 'loading', error: null, retryable: false });
-    useLoadingStore.getState().startGeneration();
-    useEditorStore.getState().setReadOnly(true);
-
-    try {
-      const request = buildPromptBarRequest(editor, goal, promptText, mode);
-
-      // Log provenance
-      logProvenance('ai-generation-requested', {
-        mode,
-        userRequest: promptText,
-        selectionFrom: selection.from,
-        selectionTo: selection.to,
-      });
-
-      const response = await callGenerateAPI(request) as GapBasedResponse;
-
-      // Collect parentRounds from selection range
-      const parentRoundIds = selection.empty ? [] : collectRoundIds(editor, selection.from, selection.to);
-
-      // Get constraint info
-      const constraintState = useConstraintStore.getState();
-      const constraintTypes = [...new Set(constraintState.constraints.map(c => c.type))];
-
-      // Create round
-      const round = useRoundStore.getState().createRound({
-        type: 'generation',
-        parentRounds: parentRoundIds,
-        prompt: promptText,
-        promptLength: promptText.length,
-        constraintCount: constraintState.constraints.length,
-        constraintTypes,
-        generationMode: mode,
-        diffActions: { accepted: 0, rejected: 0, edited: 0 },
-        events: [],
-      });
-
-      // Create graph node with base scores
-      const d1 = computeD1Base('ai-generated', 'generation');
-      const d2 = computeD2Base({
-        promptLength: promptText.length,
-        constraintCount: constraintState.constraints.length,
-        type: 'generation',
-      });
-      const d3 = computeD3Base('accepted');
-      const previousText = mode === 'selection' && request.gaps[0]
-        ? request.gaps[0].originalText
-        : '';
-      const resultText = response.gaps[0]?.text ?? '';
-      useContributionGraphStore.getState().addNode(round.roundId, { d1, d2, d3 }, {
-        prompt: promptText,
-        constraints: constraintTypes,
-        action: 'accepted',
-        type: 'generation',
-        previousText,
-        resultText,
-      });
-
-      if (mode === 'selection' && response.gaps.length > 0) {
-        // Apply as diff for selection mode
-        const gap = request.gaps[0];
-        const gapFill = response.gaps[0];
-        useEditorStore.getState().addDiff(
-          gap.originalText,
-          gapFill.text,
-          gap.position.from,
-          round.roundId,
-        );
-        const activeDiffs = useEditorStore.getState().getActiveDiffs();
-        updateDiffs(editor, activeDiffs);
-      } else if (mode === 'continuation' && response.gaps.length > 0) {
-        // Insert text at cursor position for continuation mode
-        const gapFill = response.gaps[0];
-        const cursorPos = selection.from;
-
-        // Split on double newlines to create proper paragraph structure
-        const paragraphs = gapFill.text.split(/\n\n+/).map(p => p.replace(/\n/g, ' ').trim()).filter(Boolean);
-
-        if (paragraphs.length <= 1) {
-          // Single paragraph - use simple insertText with mark
-          const text = (paragraphs[0] ?? gapFill.text).trim();
-          const { tr } = editor.state;
-          tr.insertText(text, cursorPos);
-
-          const markType = editor.schema.marks.textState;
-          if (markType) {
-            tr.addMark(
-              cursorPos,
-              cursorPos + text.length,
-              markType.create({ state: 'ai-generated', roundId: round.roundId }),
-            );
-          }
-          tr.setMeta('programmaticTextState', true);
-          editor.view.dispatch(tr);
-        } else {
-          // Multiple paragraphs - insert as structured content with proper <p> nodes
-          const content = paragraphs.map(text => ({
-            type: 'paragraph' as const,
-            content: [{
-              type: 'text' as const,
-              text,
-              marks: [{ type: 'textState', attrs: { state: 'ai-generated', roundId: round.roundId } }],
-            }],
-          }));
-          editor.chain().setMeta('programmaticTextState', true).insertContentAt(cursorPos, content).run();
-        }
-
-      }
-
-      // Log response provenance
-      logProvenance('ai-generation-received', {
-        mode,
-        gapCount: response.gaps.length,
-        userRequest: promptText,
-      });
-
-      setState({ status: 'complete', error: null, retryable: false });
-    } catch (err) {
-      const message = err instanceof GenerationError
-        ? err.message
-        : 'An unexpected error occurred. Please try again.';
-      const retryable = err instanceof GenerationError ? err.retryable : true;
-
-      setState({ status: 'error', error: message, retryable });
-    } finally {
-      useLoadingStore.getState().stopGeneration();
-      useEditorStore.getState().setReadOnly(false);
-    }
-  }, []);
-
-  /**
    * Execute a smart-edit request: send full document + editing instruction,
    * receive edited document, compute diff, and apply as diffs.
    * Used by the Chat component for edit intent.
@@ -451,7 +308,6 @@ export function useGeneration() {
   return {
     ...state,
     regenerate,
-    promptRequest,
     smartEditRequest,
     clearError,
   };

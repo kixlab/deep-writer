@@ -127,54 +127,6 @@ export function buildRequest(
 }
 
 /**
- * Build a GenerateRequest for prompt bar (selection or continuation mode).
- */
-export function buildPromptBarRequest(
-  editor: Editor,
-  goal: string,
-  promptText: string,
-  mode: 'selection' | 'continuation',
-): GenerateRequest {
-  const { doc, selection } = editor.state;
-
-  if (mode === 'selection') {
-    const { from, to } = selection;
-    const selectedText = doc.textBetween(from, to, '', '');
-    const gapId = nanoid(8);
-
-    // Build document with the selection replaced by a gap
-    const textBefore = doc.textBetween(0, from, '', '');
-    const textAfter = doc.textBetween(to, doc.content.size, '', '');
-    const documentWithGap = textBefore + `[GAP:${gapId}]` + textAfter;
-
-    return {
-      goal,
-      document: documentWithGap,
-      gaps: [{ id: gapId, position: { from, to }, originalText: selectedText }],
-      constraints: [],
-      userRequest: promptText,
-      mode: 'selection',
-    };
-  }
-
-  // Continuation mode
-  const cursorPos = selection.from;
-  const gapId = nanoid(8);
-  const textBefore = doc.textBetween(0, cursorPos, '', '');
-  const textAfter = doc.textBetween(cursorPos, doc.content.size, '', '');
-  const documentWithGap = textBefore + `[GAP:${gapId}]` + textAfter;
-
-  return {
-    goal,
-    document: documentWithGap,
-    gaps: [{ id: gapId, position: { from: cursorPos, to: cursorPos }, originalText: '' }],
-    constraints: [],
-    userRequest: promptText,
-    mode: 'continuation',
-  };
-}
-
-/**
  * Build a GenerateRequest for smart-edit mode (chat editing).
  */
 export function buildSmartEditRequest(

@@ -9,7 +9,7 @@ export interface ConstraintInfo {
   position: { from: number; to: number };
 }
 
-export type GenerateMode = 'regenerate' | 'selection' | 'continuation' | 'smart-edit';
+export type GenerateMode = 'regenerate' | 'smart-edit';
 
 export interface GenerateRequest {
   goal: string;

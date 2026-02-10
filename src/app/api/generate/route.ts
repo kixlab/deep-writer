@@ -29,13 +29,6 @@ function buildUserPrompt(request: GenerateRequest): string {
     parts.push(`User's editing instruction: ${request.userRequest ?? 'Edit the document'}`);
     parts.push('');
     parts.push('Return the complete edited document as: { "editedDocument": "<full edited text>" }');
-  } else if (request.mode === 'continuation') {
-    parts.push('Document context:');
-    parts.push(request.document);
-    parts.push('');
-    parts.push(`Continue writing from the indicated position. ${request.userRequest ?? ''}`);
-    parts.push('');
-    parts.push('Return the continuation as: { "gaps": [{ "id": "continuation", "text": "<your text>" }] }');
   } else {
     parts.push('Document with gaps:');
     parts.push(request.document);
@@ -193,7 +186,7 @@ function validateRequest(body: unknown): body is GenerateRequest {
   if (typeof req.document !== 'string') return false;
   if (!Array.isArray(req.gaps)) return false;
   if (!Array.isArray(req.constraints)) return false;
-  if (!['regenerate', 'selection', 'continuation', 'smart-edit'].includes(req.mode as string)) return false;
+  if (!['regenerate', 'smart-edit'].includes(req.mode as string)) return false;
 
   return true;
 }
@@ -235,9 +228,7 @@ export async function POST(request: NextRequest) {
     (sum, gap) => sum + gap.originalText.length,
     0,
   );
-  const maxTokens = generateRequest.mode === 'continuation'
-    ? 2048  // Continuation/first-draft needs more room
-    : Math.max(1024, Math.min(4096, Math.ceil(totalGapChars * 3)));
+  const maxTokens = Math.max(1024, Math.min(4096, Math.ceil(totalGapChars * 3)));
 
   // Build prompt
   const userPrompt = buildUserPrompt(generateRequest);

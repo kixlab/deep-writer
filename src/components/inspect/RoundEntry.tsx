@@ -17,8 +17,8 @@ interface RoundEntryProps {
  * Derives a human-readable action label from the round metadata.
  *
  * Mapping:
- *   type='generation', generationMode='continuation'  -> "AI generated"
  *   type='generation', generationMode='regenerate'     -> "AI regenerated"
+ *   type='generation', generationMode='smart-edit'     -> "AI generated"
  *   type='alternative'                                 -> "Alternative selected"
  *   If diffActions.edited > 0, appends ", then edited"
  */

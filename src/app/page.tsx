@@ -92,7 +92,7 @@ export default function Home() {
       const editor = editorHandleRef.current?.getEditor();
       if (editor) {
         const currentGoal = useSessionStore.getState().session?.goal ?? goal;
-        generation.promptRequest(editor, currentGoal, 'Write a first draft based on the writing goal.');
+        generation.smartEditRequest(editor, currentGoal, 'Write a first draft based on the writing goal.');
       }
     }, 100);
   }, [goal, initSession, generation]);
