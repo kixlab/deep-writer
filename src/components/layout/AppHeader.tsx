@@ -38,19 +38,26 @@ export function AppHeader({ goal, theme, onGoalEdit, onNewSession, onToggleTheme
         <div className="ml-4 flex shrink-0 items-center gap-2">
           <button
             onClick={toggleHighlightMode}
-            className={
-              isHighlightMode
-                ? 'rounded-lg border border-purple-300 bg-purple-50 p-1.5 text-purple-700 transition-colors hover:bg-purple-100 dark:border-purple-600 dark:bg-purple-900/30 dark:text-purple-400 dark:hover:bg-purple-900/50'
-                : 'rounded-lg border border-gray-300 p-1.5 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
-            }
-            title="Highlight Mode"
+            className="group flex items-center gap-1.5 rounded-lg border border-gray-300 px-2 py-1 text-xs transition-colors hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800"
             aria-label={isHighlightMode ? 'Hide reliance highlights' : 'Show reliance highlights'}
             aria-pressed={isHighlightMode}
           >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 20h9"/>
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-            </svg>
+            <span className={isHighlightMode ? 'text-purple-700 dark:text-purple-400' : 'text-gray-500 dark:text-gray-400'}>
+              Highlight
+            </span>
+            <span
+              className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
+                isHighlightMode
+                  ? 'bg-purple-500 dark:bg-purple-600'
+                  : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
+                  isHighlightMode ? 'translate-x-3.5' : 'translate-x-0.5'
+                }`}
+              />
+            </span>
           </button>
           <button
             onClick={toggleInspectMode}
