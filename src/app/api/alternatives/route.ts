@@ -14,8 +14,10 @@ Each alternative should:
 
 For each alternative, include a short label (1-3 words) prefixed with a relevant emoji that captures the specific creative direction of that rewrite. Avoid generic labels like "More formal", "Simpler", or "More concise". Instead, be specific to what actually changed — e.g., "🔪 Sharper imagery", "😏 Wry understatement", "🌊 Rhythmic flow", "💔 Emotional weight", "⚡ Clipped urgency".
 
+For each alternative, also include a "rationale" — a single sentence explaining what was changed and why.
+
 IMPORTANT: Return your response as valid JSON in this exact format:
-{ "alternatives": [{ "text": "alternative 1", "label": "Sharper imagery" }, { "text": "alternative 2", "label": "Wry understatement" }] }
+{ "alternatives": [{ "text": "alternative 1", "label": "Sharper imagery", "rationale": "Uses more vivid verbs to create a stronger visual impact" }, { "text": "alternative 2", "label": "Wry understatement", "rationale": "Tones down the language for a subtler, ironic effect" }] }
 
 Do not include any other text, explanations, or markdown formatting outside the JSON.`;
 
@@ -31,8 +33,10 @@ CRITICAL RULES:
 
 For each alternative, include a short label (1-3 words) prefixed with a relevant emoji that captures the specific creative direction of that rewrite.
 
+For each alternative, also include a "rationale" — a single sentence explaining what was changed and why.
+
 IMPORTANT: Return your response as valid JSON in this exact format:
-{ "alternatives": [{ "text": "full rewritten paragraph 1...", "label": "🔥 Vivid momentum" }, { "text": "full rewritten paragraph 2...", "label": "🌊 Flowing clarity" }] }
+{ "alternatives": [{ "text": "full rewritten paragraph 1...", "label": "🔥 Vivid momentum", "rationale": "Restructures sentences for forward drive and energetic pacing" }, { "text": "full rewritten paragraph 2...", "label": "🌊 Flowing clarity", "rationale": "Smooths transitions and simplifies syntax for easier reading" }] }
 
 Do not include any other text, explanations, or markdown formatting outside the JSON.`;
 
@@ -46,10 +50,10 @@ function getAlternativeCount(selectedText: string, requestedCount?: number): num
 
 function getMaxTokens(selectedText: string): number {
   const wordCount = selectedText.trim().split(/\s+/).length;
-  if (wordCount > 80) return 2048;
-  if (wordCount > 30) return 1024;
-  if (wordCount > 10) return 512;
-  return 256;
+  if (wordCount > 80) return 2560;
+  if (wordCount > 30) return 1280;
+  if (wordCount > 10) return 640;
+  return 384;
 }
 
 function buildSystemPrompt(selectedText: string, requestedCount?: number, level?: string): string {
@@ -90,6 +94,7 @@ function buildUserPrompt(selectedText: string, context: string, goal: string, an
       parts.push('- <AVOID>word</AVOID> = replace or remove this word/phrase');
       parts.push('- <LIKE>word</LIKE> = the writer liked this word from a previous suggestion');
       parts.push('- <DISLIKE>word</DISLIKE> = the writer disliked this word from a previous suggestion');
+      parts.push('- <DELETE>word</DELETE> = remove this word entirely from the output');
 
       if (annotations.originalFeedback) {
         parts.push('');
@@ -121,6 +126,7 @@ function buildUserPrompt(selectedText: string, context: string, goal: string, an
 interface Alternative {
   text: string;
   label: string;
+  rationale?: string;
 }
 
 interface AlternativesResponse {
@@ -132,8 +138,9 @@ function normalizeItem(item: unknown): Alternative | null {
     const obj = item as Record<string, unknown>;
     const text = typeof obj.text === 'string' ? obj.text : '';
     const label = typeof obj.label === 'string' ? obj.label : '';
+    const rationale = typeof obj.rationale === 'string' ? obj.rationale : undefined;
     if (text.length > 0) {
-      return { text, label };
+      return { text, label, ...(rationale ? { rationale } : {}) };
     }
   }
   // Backward compat: plain string

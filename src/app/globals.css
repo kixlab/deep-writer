@@ -93,6 +93,21 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
   padding: 4px;
   min-width: 200px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
+}
+
+.alternatives-tooltip::-webkit-scrollbar {
+  width: 6px;
+}
+
+.alternatives-tooltip::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.alternatives-tooltip::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
 }
 
 .alternatives-tooltip-item {
@@ -208,11 +223,13 @@
   padding: 6px 12px;
   border: none;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
-  background: transparent;
+  background: #ffffff;
   color: #9ca3af;
   font-size: 12px;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
+  position: sticky;
+  bottom: 0;
 }
 
 .alternatives-tooltip-regenerate:hover {
@@ -243,6 +260,11 @@
   background-color: #1f2937;
   border-color: rgba(255, 255, 255, 0.1);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+:where(.dark, .dark *) .alternatives-tooltip::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.25);
 }
 
 :where(.dark, .dark *) .alternatives-tooltip-item {
@@ -280,6 +302,7 @@
 :where(.dark, .dark *) .alternatives-tooltip-regenerate {
   color: #6b7280;
   border-top-color: rgba(255, 255, 255, 0.06);
+  background: #1f2937;
 }
 
 :where(.dark, .dark *) .alternatives-tooltip-regenerate:hover {
@@ -537,6 +560,11 @@
   border-bottom: 2px solid transparent;
 }
 
+/* Highlighter pen cursor inside alternatives tooltip */
+.alternatives-tooltip .annotatable-word {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 11-6 6v3h9l3-3'/%3E%3Cpath d='m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4'/%3E%3C/svg%3E") 2 18, pointer;
+}
+
 .annotatable-word:hover {
   background-color: rgba(0, 0, 0, 0.04);
 }
@@ -549,6 +577,139 @@
 .word-annotation-negative {
   border-bottom-color: rgba(239, 68, 68, 0.7);
   background-color: rgba(239, 68, 68, 0.06);
+}
+
+.word-annotation-keep {
+  border-bottom-color: rgba(59, 130, 246, 0.7);
+  background-color: rgba(59, 130, 246, 0.08);
+}
+
+.word-annotation-delete {
+  border-bottom-color: rgba(245, 158, 11, 0.7);
+  background-color: rgba(245, 158, 11, 0.08);
+  text-decoration: line-through;
+  text-decoration-color: rgba(245, 158, 11, 0.5);
+}
+
+.word-annotation-selected {
+  background-color: rgba(99, 102, 241, 0.12);
+  border-bottom-color: rgba(99, 102, 241, 0.6);
+  outline: 1px solid rgba(99, 102, 241, 0.3);
+  outline-offset: 1px;
+}
+
+/* Inline annotation badge */
+.word-badge {
+  display: inline;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 3px;
+  margin-left: 1px;
+  vertical-align: super;
+  user-select: none;
+  pointer-events: none;
+}
+
+.word-badge-keep {
+  color: #1d4ed8;
+  background-color: rgba(59, 130, 246, 0.12);
+}
+
+.word-badge-positive {
+  color: #15803d;
+  background-color: rgba(34, 197, 94, 0.12);
+}
+
+.word-badge-negative {
+  color: #b91c1c;
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.word-badge-delete {
+  color: #b45309;
+  background-color: rgba(245, 158, 11, 0.1);
+}
+
+:where(.dark, .dark *) .word-badge-keep {
+  color: #93c5fd;
+  background-color: rgba(96, 165, 250, 0.18);
+}
+
+:where(.dark, .dark *) .word-badge-positive {
+  color: #4ade80;
+  background-color: rgba(34, 197, 94, 0.18);
+}
+
+:where(.dark, .dark *) .word-badge-negative {
+  color: #f87171;
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+:where(.dark, .dark *) .word-badge-delete {
+  color: #fbbf24;
+  background-color: rgba(251, 191, 36, 0.15);
+}
+
+/* Word annotation popup (4-label) */
+.word-annotation-popup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background-color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.06);
+  padding: 3px;
+  pointer-events: auto;
+}
+
+.word-popup-btn {
+  padding: 3px 8px;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+
+.word-popup-btn-keep {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+}
+
+.word-popup-btn-keep:hover {
+  background-color: rgba(59, 130, 246, 0.22);
+}
+
+.word-popup-btn-positive {
+  background-color: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+
+.word-popup-btn-positive:hover {
+  background-color: rgba(34, 197, 94, 0.25);
+}
+
+.word-popup-btn-negative {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+}
+
+.word-popup-btn-negative:hover {
+  background-color: rgba(239, 68, 68, 0.22);
+}
+
+.word-popup-btn-delete {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+}
+
+.word-popup-btn-delete:hover {
+  background-color: rgba(245, 158, 11, 0.22);
 }
 
 /* Original text section in tooltip */
@@ -566,6 +727,23 @@
   letter-spacing: 0.03em;
   margin-bottom: 2px;
   user-select: none;
+}
+
+.alternatives-tooltip-rationale {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #6b7280;
+  margin-top: 4px;
+  padding: 3px 6px;
+  background-color: rgba(59, 130, 246, 0.06);
+  border-radius: 3px;
+  border-left: 2px solid rgba(59, 130, 246, 0.3);
+}
+
+:where(.dark, .dark *) .alternatives-tooltip-rationale {
+  color: #9ca3af;
+  background-color: rgba(59, 130, 246, 0.08);
+  border-left-color: rgba(59, 130, 246, 0.4);
 }
 
 /* Apply button per alternative */
@@ -614,6 +792,70 @@
 :where(.dark, .dark *) .word-annotation-negative {
   border-bottom-color: rgba(248, 113, 113, 0.7);
   background-color: rgba(248, 113, 113, 0.08);
+}
+
+:where(.dark, .dark *) .word-annotation-keep {
+  border-bottom-color: rgba(96, 165, 250, 0.7);
+  background-color: rgba(96, 165, 250, 0.1);
+}
+
+:where(.dark, .dark *) .word-annotation-delete {
+  border-bottom-color: rgba(251, 191, 36, 0.7);
+  background-color: rgba(251, 191, 36, 0.1);
+  text-decoration-color: rgba(251, 191, 36, 0.5);
+}
+
+:where(.dark, .dark *) .word-annotation-selected {
+  background-color: rgba(129, 140, 248, 0.15);
+  border-bottom-color: rgba(129, 140, 248, 0.6);
+  outline-color: rgba(129, 140, 248, 0.3);
+}
+
+:where(.dark, .dark *) .word-annotation-popup {
+  background-color: #1f2937;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+:where(.dark, .dark *) .word-popup-btn-keep {
+  background-color: rgba(96, 165, 250, 0.18);
+  color: #93c5fd;
+}
+
+:where(.dark, .dark *) .word-popup-btn-keep:hover {
+  background-color: rgba(96, 165, 250, 0.3);
+}
+
+:where(.dark, .dark *) .word-popup-btn-positive {
+  background-color: rgba(34, 197, 94, 0.18);
+  color: #4ade80;
+}
+
+:where(.dark, .dark *) .word-popup-btn-positive:hover {
+  background-color: rgba(34, 197, 94, 0.3);
+}
+
+:where(.dark, .dark *) .word-popup-btn-negative {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+:where(.dark, .dark *) .word-popup-btn-negative:hover {
+  background-color: rgba(239, 68, 68, 0.28);
+}
+
+:where(.dark, .dark *) .word-popup-btn-delete {
+  background-color: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+:where(.dark, .dark *) .word-popup-btn-delete:hover {
+  background-color: rgba(251, 191, 36, 0.28);
+}
+
+/* Dark mode: Highlighter pen cursor */
+:where(.dark, .dark *) .alternatives-tooltip .annotatable-word {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23a5b4fc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 11-6 6v3h9l3-3'/%3E%3Cpath d='m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4'/%3E%3C/svg%3E") 2 18, pointer;
 }
 
 :where(.dark, .dark *) .alternatives-tooltip-original {
@@ -752,6 +994,52 @@
   background-color: rgba(59, 130, 246, 0.25);
 }
 
+/* User annotation highlights (AI dependency perception) - Orange/Amber */
+.user-annotation-1 {
+  background-color: rgba(251, 146, 60, 0.12);
+  border-radius: 2px;
+}
+.user-annotation-2 {
+  background-color: rgba(251, 146, 60, 0.22);
+  border-radius: 2px;
+}
+.user-annotation-3 {
+  background-color: rgba(251, 146, 60, 0.34);
+  border-radius: 2px;
+}
+.user-annotation-4 {
+  background-color: rgba(251, 146, 60, 0.46);
+  border-radius: 2px;
+}
+.user-annotation-5 {
+  background-color: rgba(251, 146, 60, 0.58);
+  border-radius: 2px;
+}
+
+:where(.dark, .dark *) .user-annotation-1 {
+  background-color: rgba(251, 146, 60, 0.15);
+}
+:where(.dark, .dark *) .user-annotation-2 {
+  background-color: rgba(251, 146, 60, 0.25);
+}
+:where(.dark, .dark *) .user-annotation-3 {
+  background-color: rgba(251, 146, 60, 0.38);
+}
+:where(.dark, .dark *) .user-annotation-4 {
+  background-color: rgba(251, 146, 60, 0.50);
+}
+:where(.dark, .dark *) .user-annotation-5 {
+  background-color: rgba(251, 146, 60, 0.62);
+}
+
+/* Annotation painting cursor */
+.ProseMirror.annotation-highlight-mode {
+  cursor: crosshair;
+}
+.ProseMirror.annotation-eraser-mode {
+  cursor: not-allowed;
+}
+
 /* Marking selection style (placed after contribution levels to win CSS cascade) */
 .marking-selection {
   background-color: rgb(219 234 254);
@@ -771,3 +1059,197 @@
 :where(.dark, .dark *) .diff-clause-selection {
   background-color: rgba(59, 130, 246, 0.18);
 }
+
+/* Chat markdown rendering */
+.chat-markdown {
+  line-height: 1.6;
+}
+
+.chat-markdown p {
+  margin: 0.25em 0;
+}
+
+.chat-markdown p:first-child {
+  margin-top: 0;
+}
+
+.chat-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4 {
+  font-weight: 600;
+  margin: 0.75em 0 0.25em;
+  line-height: 1.3;
+}
+
+.chat-markdown h1 { font-size: 1.25em; }
+.chat-markdown h2 { font-size: 1.15em; }
+.chat-markdown h3 { font-size: 1.05em; }
+.chat-markdown h4 { font-size: 1em; }
+
+.chat-markdown h1:first-child,
+.chat-markdown h2:first-child,
+.chat-markdown h3:first-child,
+.chat-markdown h4:first-child {
+  margin-top: 0;
+}
+
+.chat-markdown ul,
+.chat-markdown ol {
+  margin: 0.25em 0;
+  padding-left: 1.5em;
+}
+
+.chat-markdown ul {
+  list-style-type: disc;
+}
+
+.chat-markdown ol {
+  list-style-type: decimal;
+}
+
+.chat-markdown li {
+  margin: 0.15em 0;
+}
+
+.chat-markdown li > ul,
+.chat-markdown li > ol {
+  margin: 0.1em 0;
+}
+
+.chat-markdown blockquote {
+  margin: 0.5em 0;
+  padding: 0.25em 0.75em;
+  border-left: 3px solid #d1d5db;
+  color: #6b7280;
+}
+
+:where(.dark, .dark *) .chat-markdown blockquote {
+  border-left-color: #4b5563;
+  color: #9ca3af;
+}
+
+.chat-markdown code {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.875em;
+}
+
+.chat-markdown :not(pre) > code {
+  background-color: rgba(0, 0, 0, 0.06);
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+}
+
+:where(.dark, .dark *) .chat-markdown :not(pre) > code {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.chat-markdown pre {
+  margin: 0.5em 0;
+  padding: 0.75em;
+  border-radius: 6px;
+  overflow-x: auto;
+  background-color: #1e293b;
+  color: #e2e8f0;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+
+:where(.dark, .dark *) .chat-markdown pre {
+  background-color: #0f172a;
+}
+
+.chat-markdown pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+
+.chat-markdown a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-decoration-color: rgba(37, 99, 235, 0.3);
+}
+
+.chat-markdown a:hover {
+  text-decoration-color: rgba(37, 99, 235, 0.8);
+}
+
+:where(.dark, .dark *) .chat-markdown a {
+  color: #60a5fa;
+  text-decoration-color: rgba(96, 165, 250, 0.3);
+}
+
+:where(.dark, .dark *) .chat-markdown a:hover {
+  text-decoration-color: rgba(96, 165, 250, 0.8);
+}
+
+.chat-markdown strong {
+  font-weight: 600;
+}
+
+.chat-markdown hr {
+  margin: 0.5em 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+:where(.dark, .dark *) .chat-markdown hr {
+  border-top-color: #374151;
+}
+
+.chat-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.9em;
+}
+
+.chat-markdown th,
+.chat-markdown td {
+  padding: 0.35em 0.6em;
+  border: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+.chat-markdown th {
+  font-weight: 600;
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+:where(.dark, .dark *) .chat-markdown th,
+:where(.dark, .dark *) .chat-markdown td {
+  border-color: #374151;
+}
+
+:where(.dark, .dark *) .chat-markdown th {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* highlight.js syntax theme overrides for chat */
+.chat-markdown .hljs-keyword { color: #c678dd; }
+.chat-markdown .hljs-string { color: #98c379; }
+.chat-markdown .hljs-number { color: #d19a66; }
+.chat-markdown .hljs-comment { color: #5c6370; font-style: italic; }
+.chat-markdown .hljs-function { color: #61afef; }
+.chat-markdown .hljs-built_in { color: #e6c07b; }
+.chat-markdown .hljs-title { color: #61afef; }
+.chat-markdown .hljs-attr { color: #d19a66; }
+.chat-markdown .hljs-params { color: #abb2bf; }
+.chat-markdown .hljs-literal { color: #56b6c2; }
+.chat-markdown .hljs-type { color: #e6c07b; }
+.chat-markdown .hljs-meta { color: #61afef; }
+.chat-markdown .hljs-selector-class { color: #d19a66; }
+.chat-markdown .hljs-selector-tag { color: #e06c75; }
+.chat-markdown .hljs-variable { color: #e06c75; }
+.chat-markdown .hljs-template-variable { color: #e06c75; }
+.chat-markdown .hljs-regexp { color: #98c379; }
+.chat-markdown .hljs-symbol { color: #56b6c2; }
+.chat-markdown .hljs-operator { color: #56b6c2; }
+.chat-markdown .hljs-punctuation { color: #abb2bf; }
+.chat-markdown .hljs-property { color: #e06c75; }

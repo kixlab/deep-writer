@@ -102,19 +102,35 @@ function getRemovedOriginalIndices(original: string, alternative: string): Set<n
 function tagText(
   words: string[],
   annotations: Map<number, WordAnnotation>,
-  positiveTag: string,
-  negativeTag: string,
+  tagMap: Record<WordAnnotation, string>,
 ): string | undefined {
   if (annotations.size === 0) return undefined;
   const parts: string[] = [];
   for (let i = 0; i < words.length; i++) {
     const ann = annotations.get(i);
-    if (ann === 'positive') parts.push(`<${positiveTag}>${words[i]}</${positiveTag}>`);
-    else if (ann === 'negative') parts.push(`<${negativeTag}>${words[i]}</${negativeTag}>`);
-    else parts.push(words[i]);
+    if (ann) {
+      const tag = tagMap[ann];
+      parts.push(`<${tag}>${words[i]}</${tag}>`);
+    } else {
+      parts.push(words[i]);
+    }
   }
   return parts.join(' ');
 }
+
+const ORIGINAL_TAG_MAP: Record<WordAnnotation, string> = {
+  keep: 'PRESERVE',
+  positive: 'PRESERVE',
+  negative: 'AVOID',
+  delete: 'DELETE',
+};
+
+const ALT_TAG_MAP: Record<WordAnnotation, string> = {
+  keep: 'LIKE',
+  positive: 'LIKE',
+  negative: 'DISLIKE',
+  delete: 'DELETE',
+};
 
 function serializeAnnotations(
   originalText: string,
@@ -123,14 +139,14 @@ function serializeAnnotations(
   altAnns: Map<number, Map<number, WordAnnotation>>,
 ): AnnotationCues {
   const origWords = tokenize(originalText);
-  const originalFeedback = tagText(origWords, originalAnns, 'PRESERVE', 'AVOID');
+  const originalFeedback = tagText(origWords, originalAnns, ORIGINAL_TAG_MAP);
 
   const suggestionFeedbacks: string[] = [];
   for (const [altIdx, wordAnns] of altAnns) {
     const alt = alternatives[altIdx];
     if (!alt || wordAnns.size === 0) continue;
     const altWords = tokenize(alt.text);
-    const tagged = tagText(altWords, wordAnns, 'LIKE', 'DISLIKE');
+    const tagged = tagText(altWords, wordAnns, ALT_TAG_MAP);
     if (tagged) suggestionFeedbacks.push(tagged);
   }
 
@@ -337,7 +353,10 @@ export function AlternativesTooltip({
     handlePromptRefresh();
   }, [handlePromptRefresh]);
 
-  const { top, left } = computePosition(selectionRect);
+  const { top, left, placement } = computePosition(selectionRect);
+  const maxHeight = placement === 'below'
+    ? window.innerHeight - top - VIEWPORT_MARGIN
+    : selectionRect.top - TOOLTIP_GAP - VIEWPORT_MARGIN;
 
   return (
     <div
@@ -348,6 +367,8 @@ export function AlternativesTooltip({
         top,
         left,
         maxWidth: TOOLTIP_MAX_WIDTH,
+        maxHeight,
+        overflowY: 'auto',
         zIndex: 9999,
       }}
       role="listbox"
@@ -447,7 +468,7 @@ export function AlternativesTooltip({
             <div
               key={index}
               className="alternatives-tooltip-item"
-              onMouseEnter={() => setHoveredAltIndex(index)}
+              onMouseMove={() => { if (hoveredAltIndex !== index) setHoveredAltIndex(index); }}
               onMouseLeave={() => setHoveredAltIndex(null)}
               role="option"
               aria-selected={false}
@@ -469,6 +490,11 @@ export function AlternativesTooltip({
                     <div style={{ fontSize: '13px', lineHeight: 1.5, color: 'inherit', opacity: 0.85 }}>
                       {alt.text.length > 120 ? alt.text.slice(0, 120) + '...' : alt.text}
                     </div>
+                    {alt.rationale && (
+                      <div className="alternatives-tooltip-rationale">
+                        {alt.rationale}
+                      </div>
+                    )}
                   </div>
                   <span
                     className="alternatives-tooltip-apply-btn"
@@ -491,6 +517,11 @@ export function AlternativesTooltip({
                         onAnnotationChange={(anns) => handleAltAnnotationChange(index, anns)}
                       />
                     </div>
+                    {alt.rationale && (
+                      <div className="alternatives-tooltip-rationale">
+                        {alt.rationale}
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"
