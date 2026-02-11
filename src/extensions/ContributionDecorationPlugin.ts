@@ -4,6 +4,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { useContributionGraphStore } from '@/stores/useContributionGraphStore';
+import type { Dimension } from '@/types/contribution';
 
 // --- Plugin Key ---
 
@@ -17,6 +18,7 @@ interface ContributionPluginState {
   isActive: boolean;
   scoreAccessor: ScoreAccessor | null;
   decorations: DecorationSet;
+  hoveredDimension: Dimension | null;
 }
 
 // --- Constants ---
@@ -27,6 +29,30 @@ const LEVEL_CLASSES: Record<number, string> = {
   3: 'contribution-level-3',
   4: 'contribution-level-4',
   5: 'contribution-level-5',
+};
+
+const DIMENSION_LEVEL_CLASSES: Record<Dimension, Record<number, string>> = {
+  d1: {
+    1: 'dimension-d1-level-1',
+    2: 'dimension-d1-level-2',
+    3: 'dimension-d1-level-3',
+    4: 'dimension-d1-level-4',
+    5: 'dimension-d1-level-5',
+  },
+  d2: {
+    1: 'dimension-d2-level-1',
+    2: 'dimension-d2-level-2',
+    3: 'dimension-d2-level-3',
+    4: 'dimension-d2-level-4',
+    5: 'dimension-d2-level-5',
+  },
+  d3: {
+    1: 'dimension-d3-level-1',
+    2: 'dimension-d3-level-2',
+    3: 'dimension-d3-level-3',
+    4: 'dimension-d3-level-4',
+    5: 'dimension-d3-level-5',
+  },
 };
 
 // --- Helpers ---
@@ -44,6 +70,7 @@ function scoreToLevel(score: number): number {
 function buildContributionDecorations(
   doc: ProseMirrorNode,
   scoreAccessor: ScoreAccessor,
+  hoveredDimension?: Dimension | null,
 ): DecorationSet {
   const decorations: Decoration[] = [];
 
@@ -63,7 +90,7 @@ function buildContributionDecorations(
       const roundNode = useContributionGraphStore.getState().getNode(roundId);
       const isAlternative = roundNode?.metadata.type === 'alternative';
 
-      if (isAlternative) {
+      if (isAlternative && !hoveredDimension) {
         decorations.push(
           Decoration.inline(pos, pos + node.nodeSize, {
             class: 'contribution-alternative',
@@ -72,16 +99,27 @@ function buildContributionDecorations(
         return;
       }
 
-      const d1 = scoreAccessor(roundId, 'd1');
-      const d2 = scoreAccessor(roundId, 'd2');
-      const d3 = scoreAccessor(roundId, 'd3');
-      const composite = 0.35 * d1 + 0.40 * d2 + 0.25 * d3;
-      level = scoreToLevel(composite);
+      if (hoveredDimension) {
+        // Use single dimension score
+        const singleScore = scoreAccessor(roundId, hoveredDimension);
+        level = scoreToLevel(singleScore);
+      } else {
+        const d1 = scoreAccessor(roundId, 'd1');
+        const d2 = scoreAccessor(roundId, 'd2');
+        const d3 = scoreAccessor(roundId, 'd3');
+        const composite = 0.35 * d1 + 0.40 * d2 + 0.25 * d3;
+        level = scoreToLevel(composite);
+      }
     }
+
+    // Use dimension-specific classes when a dimension is hovered
+    const cssClass = hoveredDimension
+      ? DIMENSION_LEVEL_CLASSES[hoveredDimension][level]
+      : LEVEL_CLASSES[level];
 
     decorations.push(
       Decoration.inline(pos, pos + node.nodeSize, {
-        class: LEVEL_CLASSES[level],
+        class: cssClass,
       }),
     );
   });
@@ -105,6 +143,7 @@ export const ContributionDecorationPlugin = Extension.create({
               isActive: false,
               scoreAccessor: null,
               decorations: DecorationSet.empty,
+              hoveredDimension: null,
             };
           },
 
@@ -114,12 +153,27 @@ export const ContributionDecorationPlugin = Extension.create({
             if (meta) {
               const accessor = meta.scoreAccessor ?? value.scoreAccessor;
 
+              // Handle hoveredDimension change
+              if ('hoveredDimension' in meta && value.isActive) {
+                const newHovered: Dimension | null = meta.hoveredDimension ?? null;
+                const activeAccessor = accessor ?? value.scoreAccessor;
+                return {
+                  isActive: true,
+                  scoreAccessor: activeAccessor,
+                  hoveredDimension: newHovered,
+                  decorations: activeAccessor
+                    ? buildContributionDecorations(newState.doc, activeAccessor, newHovered)
+                    : DecorationSet.empty,
+                };
+              }
+
               if (meta.isActive === true) {
                 return {
                   isActive: true,
                   scoreAccessor: accessor,
+                  hoveredDimension: value.hoveredDimension,
                   decorations: accessor
-                    ? buildContributionDecorations(newState.doc, accessor)
+                    ? buildContributionDecorations(newState.doc, accessor, value.hoveredDimension)
                     : DecorationSet.empty,
                 };
               }
@@ -128,6 +182,7 @@ export const ContributionDecorationPlugin = Extension.create({
                 return {
                   isActive: false,
                   scoreAccessor: accessor,
+                  hoveredDimension: null,
                   decorations: DecorationSet.empty,
                 };
               }
@@ -137,8 +192,9 @@ export const ContributionDecorationPlugin = Extension.create({
                 return {
                   isActive: true,
                   scoreAccessor: activeAccessor,
+                  hoveredDimension: value.hoveredDimension,
                   decorations: activeAccessor
-                    ? buildContributionDecorations(newState.doc, activeAccessor)
+                    ? buildContributionDecorations(newState.doc, activeAccessor, value.hoveredDimension)
                     : DecorationSet.empty,
                 };
               }
@@ -191,6 +247,17 @@ export function refreshContributionScores(
     editor.view.state.tr.setMeta(contributionDecorationPluginKey, {
       scoresUpdated: true,
       scoreAccessor,
+    }),
+  );
+}
+
+export function updateDimensionHover(
+  editor: Editor,
+  hoveredDimension: Dimension | null,
+): void {
+  editor.view.dispatch(
+    editor.view.state.tr.setMeta(contributionDecorationPluginKey, {
+      hoveredDimension,
     }),
   );
 }

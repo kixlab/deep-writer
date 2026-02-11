@@ -18,6 +18,7 @@ import {
   ContributionDecorationPlugin,
   updateContributionOverlay,
   refreshContributionScores,
+  updateDimensionHover,
 } from '@/extensions/ContributionDecorationPlugin';
 import type { ScoreAccessor } from '@/extensions/ContributionDecorationPlugin';
 import {
@@ -128,6 +129,7 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
     const constraints = useConstraintStore((s) => s.constraints);
     const isInspectMode = useInspectStore((s) => s.isInspectMode);
     const isHighlightMode = useInspectStore((s) => s.isHighlightMode);
+    const hoveredDimension = useInspectStore((s) => s.hoveredDimension);
     const graphNodeCount = useContributionGraphStore((s) => s.nodes.size);
     const isAnnotationMode = useUserAnnotationStore((s) => s.isAnnotationMode);
     const annotationTool = useUserAnnotationStore((s) => s.activeTool);
@@ -408,6 +410,12 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
         useContributionGraphStore.getState().accumulatedScore(roundId, dimension);
       refreshContributionScores(editor, scoreAccessor);
     }, [editor, isInspectMode, isHighlightMode, graphNodeCount]);
+
+    // Sync dimension hover to contribution decoration plugin
+    useEffect(() => {
+      if (!editor || !isInspectMode) return;
+      updateDimensionHover(editor, hoveredDimension);
+    }, [editor, isInspectMode, hoveredDimension]);
 
     // Sync annotation mode to plugin
     useEffect(() => {

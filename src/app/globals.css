@@ -1017,6 +1017,122 @@
   background-color: rgba(59, 130, 246, 0.25);
 }
 
+/* Dimension-specific hover decorations */
+/* d1 = Wording (Blue) */
+.dimension-d1-level-5 {
+  background-color: transparent;
+  border-radius: 2px;
+}
+.dimension-d1-level-4 {
+  background-color: rgba(59, 130, 246, 0.08);
+  border-radius: 2px;
+}
+.dimension-d1-level-3 {
+  background-color: rgba(59, 130, 246, 0.16);
+  border-radius: 2px;
+}
+.dimension-d1-level-2 {
+  background-color: rgba(59, 130, 246, 0.24);
+  border-radius: 2px;
+}
+.dimension-d1-level-1 {
+  background-color: rgba(59, 130, 246, 0.32);
+  border-radius: 2px;
+}
+
+/* d2 = Concept (Green) */
+.dimension-d2-level-5 {
+  background-color: transparent;
+  border-radius: 2px;
+}
+.dimension-d2-level-4 {
+  background-color: rgba(34, 197, 94, 0.08);
+  border-radius: 2px;
+}
+.dimension-d2-level-3 {
+  background-color: rgba(34, 197, 94, 0.16);
+  border-radius: 2px;
+}
+.dimension-d2-level-2 {
+  background-color: rgba(34, 197, 94, 0.24);
+  border-radius: 2px;
+}
+.dimension-d2-level-1 {
+  background-color: rgba(34, 197, 94, 0.32);
+  border-radius: 2px;
+}
+
+/* d3 = Evaluation (Orange) */
+.dimension-d3-level-5 {
+  background-color: transparent;
+  border-radius: 2px;
+}
+.dimension-d3-level-4 {
+  background-color: rgba(249, 115, 22, 0.08);
+  border-radius: 2px;
+}
+.dimension-d3-level-3 {
+  background-color: rgba(249, 115, 22, 0.16);
+  border-radius: 2px;
+}
+.dimension-d3-level-2 {
+  background-color: rgba(249, 115, 22, 0.24);
+  border-radius: 2px;
+}
+.dimension-d3-level-1 {
+  background-color: rgba(249, 115, 22, 0.32);
+  border-radius: 2px;
+}
+
+/* Dimension hover — dark mode */
+:where(.dark, .dark *) .dimension-d1-level-5 {
+  background-color: transparent;
+}
+:where(.dark, .dark *) .dimension-d1-level-4 {
+  background-color: rgba(59, 130, 246, 0.10);
+}
+:where(.dark, .dark *) .dimension-d1-level-3 {
+  background-color: rgba(59, 130, 246, 0.20);
+}
+:where(.dark, .dark *) .dimension-d1-level-2 {
+  background-color: rgba(59, 130, 246, 0.30);
+}
+:where(.dark, .dark *) .dimension-d1-level-1 {
+  background-color: rgba(59, 130, 246, 0.38);
+}
+
+:where(.dark, .dark *) .dimension-d2-level-5 {
+  background-color: transparent;
+}
+:where(.dark, .dark *) .dimension-d2-level-4 {
+  background-color: rgba(34, 197, 94, 0.10);
+}
+:where(.dark, .dark *) .dimension-d2-level-3 {
+  background-color: rgba(34, 197, 94, 0.20);
+}
+:where(.dark, .dark *) .dimension-d2-level-2 {
+  background-color: rgba(34, 197, 94, 0.30);
+}
+:where(.dark, .dark *) .dimension-d2-level-1 {
+  background-color: rgba(34, 197, 94, 0.38);
+}
+
+:where(.dark, .dark *) .dimension-d3-level-5 {
+  background-color: transparent;
+}
+:where(.dark, .dark *) .dimension-d3-level-4 {
+  background-color: rgba(249, 115, 22, 0.10);
+}
+:where(.dark, .dark *) .dimension-d3-level-3 {
+  background-color: rgba(249, 115, 22, 0.20);
+}
+:where(.dark, .dark *) .dimension-d3-level-2 {
+  background-color: rgba(249, 115, 22, 0.30);
+}
+:where(.dark, .dark *) .dimension-d3-level-1 {
+  background-color: rgba(249, 115, 22, 0.38);
+}
+
 /* User annotation highlights — 3 levels of perceived AI reliance */
 .user-annotation-1 {
   background-color: rgba(251, 146, 60, 0.15);

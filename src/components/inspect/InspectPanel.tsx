@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import type { Editor } from '@tiptap/react';
-import type { SelectedSegment } from '@/types/contribution';
+import type { SelectedSegment, Dimension } from '@/types/contribution';
 import { useInspectStore } from '@/stores/useInspectStore';
 import { useDocumentScores } from '@/hooks/useDocumentScores';
 import { DonutChart } from './DonutChart';
@@ -278,6 +278,38 @@ function SegmentView({
 
 // --- Sub-components ---
 
+// --- Dimension metadata ---
+
+const DIMENSION_META: Record<
+  Dimension,
+  { label: string; color: string; description: string; factors: string }
+> = {
+  d1: {
+    label: 'Wording',
+    color: 'rgb(59, 130, 246)',
+    description: 'How much you directly wrote or edited the text.',
+    factors: 'Direct typing, manual edits, word-level revisions, and text corrections.',
+  },
+  d2: {
+    label: 'Concept',
+    color: 'rgb(34, 197, 94)',
+    description: 'How much the ideas and structure originated from you.',
+    factors: 'Prompts, constraints, topic guidance, structural decisions, and conceptual direction.',
+  },
+  d3: {
+    label: 'Evaluation',
+    color: 'rgb(249, 115, 22)',
+    description: 'How much you reviewed and curated the output.',
+    factors: 'Accepting/rejecting suggestions, selecting alternatives, and reviewing generated content.',
+  },
+};
+
+const LABEL_TO_DIMENSION: Record<string, Dimension> = {
+  Wording: 'd1',
+  Concept: 'd2',
+  Evaluation: 'd3',
+};
+
 function DimensionChips({
   concept,
   wording,
@@ -287,38 +319,83 @@ function DimensionChips({
   wording: number;
   evaluation: number;
 }) {
+  const setHoveredDimension = useInspectStore((s) => s.setHoveredDimension);
+  const clearHoveredDimension = useInspectStore((s) => s.clearHoveredDimension);
+  const hoveredDimension = useInspectStore((s) => s.hoveredDimension);
+
   const dims = [
-    { label: 'Concept', value: concept },
     { label: 'Wording', value: wording },
+    { label: 'Concept', value: concept },
     { label: 'Evaluation', value: evaluation },
   ];
 
+  const hoveredMeta = hoveredDimension ? DIMENSION_META[hoveredDimension] : null;
+
   return (
-    <div className="grid grid-cols-3 gap-2">
-      {dims.map((dim) => {
-        const pct = Math.round((Number.isFinite(dim.value) ? dim.value : 0) * 100);
-        const color = getDimensionColor(dim.value);
-        return (
-          <div
-            key={dim.label}
-            className="flex flex-col items-center p-2.5 rounded-lg bg-white dark:bg-gray-900 border-2"
-            style={{ borderColor: color }}
-          >
-            <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
-              {dim.label}
-            </span>
-            <span
-              className="text-lg font-bold"
-              style={{ color }}
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-3 gap-2">
+        {dims.map((dim) => {
+          const pct = Math.round((Number.isFinite(dim.value) ? dim.value : 0) * 100);
+          const dimKey = LABEL_TO_DIMENSION[dim.label];
+          const meta = DIMENSION_META[dimKey];
+          const isHovered = hoveredDimension === dimKey;
+          const color = isHovered ? meta.color : getDimensionColor(dim.value);
+          return (
+            <div
+              key={dim.label}
+              className={`flex flex-col items-center p-2.5 rounded-lg bg-white dark:bg-gray-900 border-2 cursor-pointer transition-all duration-200 ${
+                isHovered ? 'scale-105 shadow-md' : 'hover:scale-[1.02]'
+              }`}
+              style={{
+                borderColor: color,
+                boxShadow: isHovered ? `0 0 12px ${meta.color}40` : undefined,
+              }}
+              onMouseEnter={() => setHoveredDimension(dimKey)}
+              onMouseLeave={() => clearHoveredDimension()}
             >
-              {pct}%
-            </span>
-            <span className="text-[9px] text-gray-400 dark:text-gray-500">
-              You
-            </span>
+              <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                {dim.label}
+              </span>
+              <span
+                className="text-lg font-bold transition-colors duration-200"
+                style={{ color }}
+              >
+                {pct}%
+              </span>
+              <span className="text-[9px] text-gray-400 dark:text-gray-500">
+                You
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Dimension detail breakdown on hover */}
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-in-out ${
+          hoveredMeta ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
+        }`}
+      >
+        {hoveredMeta && (
+          <div
+            className="p-3 rounded-lg border text-xs leading-relaxed"
+            style={{
+              borderColor: `${hoveredMeta.color}40`,
+              backgroundColor: `${hoveredMeta.color}08`,
+            }}
+          >
+            <p className="font-semibold text-gray-700 dark:text-gray-200 mb-1">
+              {hoveredMeta.label}
+            </p>
+            <p className="text-gray-600 dark:text-gray-400 mb-1.5">
+              {hoveredMeta.description}
+            </p>
+            <p className="text-gray-500 dark:text-gray-500 text-[10px]">
+              <span className="font-medium">Factors:</span> {hoveredMeta.factors}
+            </p>
           </div>
-        );
-      })}
+        )}
+      </div>
     </div>
   );
 }
