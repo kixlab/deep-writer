@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
 import { useChatStore, type ChatMessage } from '@/stores/useChatStore';
 import { useLoadingStore } from '@/stores/useLoadingStore';
 
@@ -10,6 +12,17 @@ interface ChatPanelProps {
   onSendMessage: (text: string) => void;
   disabled?: boolean;
 }
+
+interface PastedItem {
+  id: number;
+  text: string;
+  lineCount: number;
+  isExpanded: boolean;
+}
+
+// --- Constants ---
+
+const PASTE_LINE_THRESHOLD = 10;
 
 // --- Sub-components ---
 
@@ -24,7 +37,15 @@ function ChatBubble({ message }: { message: ChatMessage }) {
             : 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
         }`}
       >
-        <div className="whitespace-pre-wrap">{message.content}</div>
+        {isUser ? (
+          <div className="whitespace-pre-wrap">{message.content}</div>
+        ) : (
+          <div className="chat-markdown">
+            <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
         {message.intent === 'edit' && (
           <span className="mt-1 block text-xs opacity-60">
             Editing document...
@@ -51,26 +72,82 @@ function EmptyState() {
   return (
     <div className="flex flex-1 items-center justify-center px-6 text-center">
       <div className="text-sm text-gray-400 dark:text-gray-500">
-        <p className="mb-1 font-medium">Ask about your writing</p>
+        <p className="mb-1 font-medium">Start a conversation</p>
         <p className="text-xs">
-          Chat about ideas, ask for feedback, or request edits to your document.
+          Ask questions, brainstorm ideas, get feedback on your writing, or request edits.
         </p>
       </div>
     </div>
   );
 }
 
+function PastedItemChip({
+  item,
+  onToggle,
+  onRemove,
+}: {
+  item: PastedItem;
+  onToggle: (id: number) => void;
+  onRemove: (id: number) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-900/20">
+      <div className="flex items-center gap-2 px-3 py-1.5">
+        <button
+          type="button"
+          onClick={() => onToggle(item.id)}
+          className="flex flex-1 items-center gap-1.5 text-left text-xs font-medium text-sky-700 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300"
+        >
+          <svg
+            className={`h-3 w-3 shrink-0 transition-transform ${item.isExpanded ? 'rotate-90' : ''}`}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+          <span>[Pasted text #{item.id} +{item.lineCount} lines]</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onRemove(item.id)}
+          className="shrink-0 rounded p-0.5 text-sky-400 transition-colors hover:bg-sky-100 hover:text-sky-600 dark:hover:bg-sky-800 dark:hover:text-sky-300"
+          aria-label={`Remove pasted text #${item.id}`}
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      {item.isExpanded && (
+        <div className="border-t border-sky-200 px-3 py-2 dark:border-sky-800">
+          <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-gray-700 dark:text-gray-300">
+            {item.text}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ChatInput({ onSend, disabled }: { onSend: (text: string) => void; disabled: boolean }) {
   const [text, setText] = useState('');
+  const [pastedItems, setPastedItems] = useState<PastedItem[]>([]);
+  const pasteCounterRef = useRef(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = useCallback(() => {
-    const trimmed = text.trim();
-    if (!trimmed || disabled) return;
-    onSend(trimmed);
+    const pastedTexts = pastedItems.map((item) => item.text);
+    const combined = [...pastedTexts, text.trim()].filter(Boolean).join('\n\n');
+    if (!combined || disabled) return;
+    onSend(combined);
     setText('');
-  }, [text, disabled, onSend]);
-
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+    setPastedItems([]);
+  }, [text, disabled, onSend, pastedItems]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -82,6 +159,39 @@ function ChatInput({ onSend, disabled }: { onSend: (text: string) => void; disab
     [handleSubmit],
   );
 
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const pastedText = e.clipboardData.getData('text/plain');
+      const lines = pastedText.split('\n');
+      if (lines.length >= PASTE_LINE_THRESHOLD) {
+        e.preventDefault();
+        pasteCounterRef.current += 1;
+        setPastedItems((prev) => [
+          ...prev,
+          {
+            id: pasteCounterRef.current,
+            text: pastedText,
+            lineCount: lines.length,
+            isExpanded: false,
+          },
+        ]);
+      }
+    },
+    [],
+  );
+
+  const togglePastedItem = useCallback((id: number) => {
+    setPastedItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, isExpanded: !item.isExpanded } : item,
+      ),
+    );
+  }, []);
+
+  const removePastedItem = useCallback((id: number) => {
+    setPastedItems((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
   // Auto-resize textarea to fit content
   useEffect(() => {
     const el = textareaRef.current;
@@ -92,13 +202,26 @@ function ChatInput({ onSend, disabled }: { onSend: (text: string) => void; disab
 
   return (
     <div className="shrink-0 border-t border-gray-200 px-3 py-3 dark:border-gray-700">
+      {pastedItems.length > 0 && (
+        <div className="mb-2 space-y-1.5">
+          {pastedItems.map((item) => (
+            <PastedItemChip
+              key={item.id}
+              item={item}
+              onToggle={togglePastedItem}
+              onRemove={removePastedItem}
+            />
+          ))}
+        </div>
+      )}
       <div className="flex items-end gap-2">
         <textarea
           ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask about your writing or request an edit..."
+          onPaste={handlePaste}
+          placeholder="Type a message..."
           disabled={disabled}
           rows={1}
           className="flex-1 resize-none rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm leading-relaxed outline-none transition-colors placeholder:text-gray-400 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-blue-500"
@@ -106,7 +229,7 @@ function ChatInput({ onSend, disabled }: { onSend: (text: string) => void; disab
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={disabled || !text.trim()}
+          disabled={disabled || (!text.trim() && pastedItems.length === 0)}
           className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-40 disabled:hover:bg-blue-600"
           aria-label="Send message"
         >
