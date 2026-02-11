@@ -24,6 +24,7 @@ interface AlternativesTooltipProps {
   onDismiss: () => void;
   onExpandSelection: (level: ExpandLevel) => void;
   activeLevel?: ExpandLevel | 'word';
+  prefetchedAlternatives?: Alternative[] | null;
 }
 
 const EXPAND_LEVELS: { level: ExpandLevel; label: string }[] = [
@@ -171,6 +172,7 @@ export function AlternativesTooltip({
   onDismiss,
   onExpandSelection,
   activeLevel = 'word',
+  prefetchedAlternatives,
 }: AlternativesTooltipProps) {
   const tooltipRef = useRef<HTMLDivElement>(null);
   const promptInputRef = useRef<HTMLInputElement>(null);
@@ -211,13 +213,23 @@ export function AlternativesTooltip({
     }
   }, [alternatives]);
 
-  // On mount + when activeLevel changes: show cache or fetch
+  // On mount + when activeLevel changes: show cache, use prefetch, or fetch
   useEffect(() => {
     const cached = cacheRef.current[activeLevel];
     if (cached) {
       setDisplayAlts(cached.alternatives);
       setOriginalAnnotations(cached.originalAnnotations);
       setAltAnnotations(cached.altAnnotations);
+    } else if (activeLevel === 'word' && prefetchedAlternatives && prefetchedAlternatives.length > 0) {
+      // Use pre-fetched results for the initial word level
+      cacheRef.current[activeLevel] = {
+        alternatives: prefetchedAlternatives,
+        originalAnnotations: new Map(),
+        altAnnotations: new Map(),
+      };
+      setDisplayAlts(prefetchedAlternatives);
+      setOriginalAnnotations(new Map());
+      setAltAnnotations(new Map());
     } else {
       setDisplayAlts(null);
       setOriginalAnnotations(new Map());

@@ -20,14 +20,23 @@ import {
   refreshContributionScores,
 } from '@/extensions/ContributionDecorationPlugin';
 import type { ScoreAccessor } from '@/extensions/ContributionDecorationPlugin';
+import {
+  UserAnnotationPlugin,
+  activateAnnotationMode,
+  deactivateAnnotationMode,
+  setAnnotationTool,
+} from '@/extensions/UserAnnotationPlugin';
 import { InspectClickPlugin } from '@/extensions/InspectClickPlugin';
 import { DeletionMarkerPlugin } from '@/extensions/DeletionMarkerPlugin';
+import { FlashHighlightPlugin, triggerFlashHighlight } from '@/extensions/FlashHighlightPlugin';
 import { useInspectStore } from '@/stores/useInspectStore';
+import { useUserAnnotationStore } from '@/stores/useUserAnnotationStore';
 import { MarkingExtension, clearMarkingSelection, expandMarkingSelection } from '@/extensions/MarkingExtension';
 import { getWordBoundary } from '@/lib/boundaries';
 import type { DragSelectionData, ConstraintData, ExpandLevel } from '@/extensions/MarkingExtension';
 import { AlternativesTooltip } from '@/components/editor/AlternativesTooltip';
 import { AlternativesButton } from '@/components/editor/AlternativesButton';
+import { useAlternatives } from '@/hooks/useAlternatives';
 import { useEditorStore } from '@/stores/useEditorStore';
 import { useConstraintStore } from '@/stores/useConstraintStore';
 import { useLoadingStore } from '@/stores/useLoadingStore';
@@ -119,12 +128,20 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
     const isInspectMode = useInspectStore((s) => s.isInspectMode);
     const isHighlightMode = useInspectStore((s) => s.isHighlightMode);
     const graphNodeCount = useContributionGraphStore((s) => s.nodes.size);
+    const isAnnotationMode = useUserAnnotationStore((s) => s.isAnnotationMode);
+    const annotationTool = useUserAnnotationStore((s) => s.activeTool);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
     // Two-step alternative generation: selection button → tooltip
     const [selectionData, setSelectionData] = useState<DragSelectionData | null>(null);
     const [tooltipData, setTooltipData] = useState<DragSelectionData | null>(null);
     const [activeLevel, setActiveLevel] = useState<ExpandLevel | 'word'>('word');
+
+    // Flash highlight is handled by FlashHighlightPlugin via triggerFlashHighlight()
+
+    // Pre-fetch alternatives when text is selected
+    const prefetch = useAlternatives();
+    const prefetchTextRef = useRef<string | null>(null);
 
     const handleSelectionDismiss = useCallback(() => {
       setSelectionData(null);
@@ -252,8 +269,10 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
         }),
         ConstraintDecorationPlugin,
         ContributionDecorationPlugin,
+        UserAnnotationPlugin,
         InspectClickPlugin,
         DeletionMarkerPlugin,
+        FlashHighlightPlugin,
         MarkingExtension.configure({
           onProvenanceEvent: handleProvenanceEvent,
           onDragSelection: handleDragSelection,
@@ -294,6 +313,27 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
         _resetActiveLevel = null;
       };
     }, []);
+
+    // Pre-fetch alternatives when text is selected (before user clicks "Alternatives")
+    useEffect(() => {
+      if (selectionData && !tooltipData && editorRef.current?.view) {
+        const view = editorRef.current.view;
+        const doc = view.state.doc;
+        const startWord = getWordBoundary(doc, selectionData.from);
+        const endWord = getWordBoundary(doc, selectionData.to);
+        const text = doc.textBetween(startWord.from, endWord.to, ' ');
+        if (text.trim().length < 2 || text === prefetchTextRef.current) return;
+        prefetchTextRef.current = text;
+        const docSize = doc.content.size;
+        const contextStart = Math.max(0, startWord.from - 200);
+        const contextEnd = Math.min(docSize, endWord.to + 200);
+        const context = doc.textBetween(contextStart, contextEnd, ' ');
+        prefetch.fetchAlternatives(text, context, sessionGoal);
+      } else if (!selectionData && !tooltipData) {
+        prefetchTextRef.current = null;
+        prefetch.reset();
+      }
+    }, [selectionData, tooltipData, sessionGoal, prefetch]);
 
     // Expose editor instance to parent via ref
     useImperativeHandle(ref, () => ({
@@ -349,6 +389,24 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
       refreshContributionScores(editor, scoreAccessor);
     }, [editor, isInspectMode, isHighlightMode, graphNodeCount]);
 
+    // Sync annotation mode to plugin
+    useEffect(() => {
+      if (!editor) return;
+      if (isAnnotationMode) {
+        activateAnnotationMode(editor, annotationTool);
+        // Dismiss alternatives when entering annotation mode
+        dismissSelection();
+      } else {
+        deactivateAnnotationMode(editor);
+      }
+    }, [editor, isAnnotationMode, annotationTool]);
+
+    // Sync annotation tool changes
+    useEffect(() => {
+      if (!editor || !isAnnotationMode) return;
+      setAnnotationTool(editor, annotationTool);
+    }, [editor, isAnnotationMode, annotationTool]);
+
     return (
       <div
         className={`flex-1 text-gray-900 dark:text-gray-100 ${className}`}
@@ -371,6 +429,7 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
               selectedText={tooltipData.text}
               context={tooltipData.context}
               goal={sessionGoal}
+              prefetchedAlternatives={prefetch.alternatives}
               onReplace={(alternative) => {
                 // Collect parentRounds from the text being replaced
                 const parentRoundIds = collectRoundIds(editor, tooltipData.from, tooltipData.to);
@@ -430,6 +489,7 @@ export const CoWriThinkEditor = forwardRef<CoWriThinkEditorHandle, CoWriThinkEdi
                   }
                   tr.setMeta('programmaticTextState', true);
                   editor.view.dispatch(tr);
+                  triggerFlashHighlight(editor, tooltipData.from, tooltipData.from + alternative.length);
                   handleTooltipDismiss();
                 }
               }}

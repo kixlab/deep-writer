@@ -11,6 +11,7 @@ export interface AnnotationCues {
 export interface Alternative {
   text: string;
   label: string;
+  rationale?: string;
 }
 
 interface UseAlternativesReturn {

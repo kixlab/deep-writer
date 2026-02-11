@@ -5,7 +5,12 @@
 ## 1. Tooltip
 
 ### Rationale Display
-- [ ] Suggestion hover 시 tooltip 내 original text 영역에 변경 rationale 함께 표시 (현재는 삭제된 부분만 붉은색 표시 -> rationale 텍스트도 추가)
+- [x] Suggestion hover 시 tooltip 내 original text 영역에 변경 rationale 함께 표시 (현재는 삭제된 부분만 붉은색 표시 -> rationale 텍스트도 추가)
+  - API prompt updated to generate `rationale` field for each alternative (`api/alternatives/route.ts`)
+  - Rationale displayed permanently below each suggestion (no hover needed)
+  - Scrollable tooltip with always-visible scrollbar + sticky Regenerate button
+  - Pre-fetch alternatives on text selection for instant tooltip loading (`CoWriThinkEditor.tsx`, `useAlternatives.ts`)
+  - Inline flash highlight (green fade-out) on applied text via `FlashHighlightPlugin.ts`
 
 ### Promptbox Regeneration
 - [ ] [Verify] Tooltip promptbox에서 user request가 각 suggestion 재생성에 실제로 영향을 주는지 현재 동작 확인
